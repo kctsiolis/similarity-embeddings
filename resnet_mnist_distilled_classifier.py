@@ -31,7 +31,7 @@ def get_args(parser):
         help='Input batch size for validation (default:1000)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
         help='Input batch size for testing (default:1000)')
-    parser.add_argument('--epochs', type=int, default=20, metavar='N',
+    parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
@@ -51,6 +51,8 @@ def get_args(parser):
                         help='Directory for saving loss and accuracy plots.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
+    parser.add_argument('--step-size', type=int, default=5,
+                        help='Learning rate scheduler step size.')
     args = parser.parse_args()
 
     return args
@@ -73,9 +75,9 @@ def main():
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device, seed=args.seed, 
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr, gamma=args.gamma, 
-        early_stop=args.early_stop, log_interval=args.log_interval, save_path=args.save_path, 
-        plots_dir=args.plots_dir)
+        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr, step_size=args.step_size,
+        gamma=args.gamma, early_stop=args.early_stop, log_interval=args.log_interval, 
+        save_path=args.save_path, plots_dir=args.plots_dir)
 
 if __name__ == '__main__':
     main()

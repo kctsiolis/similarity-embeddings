@@ -9,12 +9,12 @@ import numpy as np
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 from matplotlib import pyplot as plt
-from data_augmentation import gaussian_blur, sim_prob
+from data_augmentation import augment
 
 #Supervised training loop
 def train_sup(model, train_loader, valid_loader, device='cpu', seed=42, train_batch_size=64, 
-    valid_batch_size=1000, loss_function=nn.CrossEntropyLoss, epochs=20, 
-    lr=0.1, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None):
+    valid_batch_size=1000, loss_function=nn.CrossEntropyLoss, epochs=20, lr=0.1,
+    step_size=5, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None):
     
     torch.manual_seed(seed)
     device = torch.device(device)
@@ -24,7 +24,7 @@ def train_sup(model, train_loader, valid_loader, device='cpu', seed=42, train_ba
     #TODO: Generalize this to any optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -64,8 +64,8 @@ def train_sup(model, train_loader, valid_loader, device='cpu', seed=42, train_ba
     return train_losses, train_accs, val_losses, val_accs
 
 def train_distillation(student, teacher, train_loader, valid_loader, device='cpu', 
-    seed=42, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, 
-    epochs=20, lr=0.1, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None, 
+    seed=42, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
+    lr=0.1, step_size=5, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None, 
     cosine=False):
 
     torch.manual_seed(seed)
@@ -77,7 +77,7 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
     #TODO: Generalize this to any optimizer
     optimizer = optim.Adam(student.parameters(), lr=lr)
 
-    scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -116,9 +116,9 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
     return train_losses, val_losses
 
 #Supervised training loop
-def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur',
-    seed=42, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
-    lr=0.1, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None, cosine=False):
+def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur-sigma',
+    alpha_max=10, seed=42, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
+    lr=0.1, step_size=5, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None, cosine=False):
     
     torch.manual_seed(seed)
     device = torch.device(device)
@@ -128,7 +128,7 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
     #TODO: Generalize this to any optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -137,11 +137,11 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
     for epoch in range(1, epochs + 1):
         train_similarity_epoch(model, device, train_loader, train_batch_size, loss_function, 
-            optimizer, epoch, log_interval, augmentation, cosine)
+            optimizer, epoch, log_interval, augmentation, alpha_max, cosine)
         train_loss = compute_similarity_loss(model, device, train_loader, loss_function, 
-            augmentation, cosine, "Train")
+            augmentation, alpha_max, cosine, "Train")
         val_loss = compute_similarity_loss(model, device, valid_loader, loss_function, 
-            augmentation, cosine, "Validation")
+            augmentation, alpha_max, cosine, "Validation")
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -192,19 +192,7 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        student_embs = student(data)
-        if cosine:
-            #Normalize embeddings to unit norm (for cosine similarity calculation)
-            student_embs = F.normalize(student_embs, p=2, dim=1)
-        #Get the similarities / dot products
-        student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))
-
-        with torch.no_grad():
-            teacher_embs = teacher(data)
-            if cosine:
-                teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-            teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
-
+        student_sims, teacher_sims = get_student_teacher_similarity(student, teacher, data, cosine)
         loss = loss_fn(student_sims, teacher_sims)
         loss.backward()
         optimizer.step()
@@ -216,33 +204,18 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
 
 #Epoch of similarity training
 def train_similarity_epoch(model, device, train_loader, batch_size,
-    loss_function, optimizer, epoch, log_interval, augmentation, cosine):
+    loss_function, optimizer, epoch, log_interval, augmentation, alpha_max, cosine):
     model.train()
     loss_function = loss_function() #Instantiate loss
-    sigmoid = nn.Sigmoid()
-    for batch_idx, (data, target) in enumerate(train_loader):
+    if not cosine:
+        #Use the sigmoid function to map outputs to (0,1)
+        sigmoid = nn.Sigmoid()
+    for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        if augmentation == 'blur':
-            alpha = (torch.rand(data.shape[0])*5).to(device)
-            augmented_data = gaussian_blur(data, alpha, device=device)
-        else:
-            raise NotImplementedError
-        #Get embeddings for original data
-        data_embs = model(data)
-        if cosine:
-            data_embs = F.normalize(data_embs, p=2, dim=1)
-        #Get embeddings for augmented data
-        augmented_data_embs = model(augmented_data)
-        if cosine:
-            augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
-        model_sims = torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
-        if cosine:
-            output = (model_sims + 1) / 2
-        else:
-            output = sigmoid(model_sims)
-        target = sim_prob(alpha)
-        loss = loss_function(output, target.detach())
+        augmented_data, sim_prob = augment(data, augmentation, alpha_max, device=device)
+        output = get_model_similarity(model, data, augmented_data, cosine)
+        loss = loss_function(output, sim_prob.detach())
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -301,6 +274,41 @@ def get_labels(loader):
 
     return labels
 
+#Get similarities between instances, as given by student and teacher
+def get_student_teacher_similarity(student, teacher, data, cosine):
+    student_embs = student(data)
+    if cosine:
+        student_embs = F.normalize(student_embs, p=2, dim=1)
+    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))
+
+    with torch.no_grad():
+        teacher_embs = teacher(data)
+        if cosine:
+            teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
+        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+
+    return student_sims, teacher_sims
+    
+
+#Get normalized similarities between original and augmented data, as predicted by the model 
+def get_model_similarity(model, data, augmented_data, cosine):
+    #Get embeddings of original data
+    data_embs = model(data)
+    #Get embeddings of augmented data
+    augmented_data_embs = model(augmented_data)
+    if cosine: #Using cosine similarity
+        data_embs = F.normalize(data_embs, p=2, dim=1)
+        augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
+    model_sims = torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
+    if cosine:
+        #Cosine similarity will already be between 0 and 1 due to non-negativity of embeddings
+        output = model_sims
+    else: #Use sigmoid to map similarities to (0,1)
+        sigmoid = nn.Sigmoid()
+        output = sigmoid(model_sims)
+
+    return output
+
 #Compute loss over the entire set
 def compute_distillation_loss(student, teacher, device, loader, loss_function, cosine, subset):
     student.eval()
@@ -310,14 +318,7 @@ def compute_distillation_loss(student, teacher, device, loader, loss_function, c
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
-            student_embs = student(data)
-            if cosine:
-                student_embs = F.normalize(student_embs, p=2, dim=1)
-            student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))
-            teacher_embs = teacher(data)
-            if cosine:
-                teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-            teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+            student_sims, teacher_sims = get_student_teacher_similarity(student, teacher, data, cosine)
             losses.append(loss_function(student_sims, teacher_sims).item())
 
     loss = np.mean(losses)
@@ -326,34 +327,16 @@ def compute_distillation_loss(student, teacher, device, loader, loss_function, c
 
     return loss
 
-def compute_similarity_loss(model, device, loader, loss_function, augmentation, cosine, subset):
+def compute_similarity_loss(model, device, loader, loss_function, augmentation, alpha_max, cosine, subset):
     model.eval()
     loss_function = loss_function()
     losses = []
     with torch.no_grad():
-        sigmoid = nn.Sigmoid()
         for data, _ in loader:
             data = data.to(device)
-            if augmentation == 'blur':
-                alpha = (torch.rand(data.shape[0])*5).to(device)
-                augmented_data = gaussian_blur(data, alpha, device=device)
-            else:
-                raise NotImplementedError
-            #Get embeddings for original data
-            data_embs = model(data)
-            if cosine:
-                data_embs = F.normalize(data_embs, p=2, dim=1)
-            #Get embeddings for augmented data
-            augmented_data_embs = model(augmented_data)
-            if cosine:
-                augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
-            model_sims = torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
-            if cosine:
-                output = (model_sims + 1) / 2
-            else:
-                output = sigmoid(model_sims)
-            target = sim_prob(alpha)
-            losses.append(loss_function(output, target).item())
+            augmented_data, sim_prob = augment(data, augmentation, alpha_max, device=device)
+            output = get_model_similarity(model, data, augmented_data, cosine)
+            losses.append(loss_function(output, sim_prob).item())
 
     loss = np.mean(losses)
 

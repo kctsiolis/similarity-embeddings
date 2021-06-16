@@ -13,7 +13,7 @@ def get_args(parser):
         help='Input batch size for validation (default:1000)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
         help='Input batch size for testing (default:1000)')
-    parser.add_argument('--epochs', type=int, default=20, metavar='N',
+    parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
@@ -35,6 +35,12 @@ def get_args(parser):
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
+    parser.add_argument('--step-size', type=int, default=5,
+                        help='Learning rate scheduler step size.')
+    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
+                        help='Augmentation to use.')
+    parser.add_argument('--alpha-max', type=int, default=None,
+                        help='Largest possible augmentation strength.')
     args = parser.parse_args()
 
     return args
@@ -48,11 +54,11 @@ def main():
     train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)
 
-    train_similarity(model, train_loader, valid_loader, device=args.device, augmentation='blur',
-        seed=args.seed, train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.MSELoss, epochs=args.epochs, lr=args.lr, gamma=args.gamma, 
-        early_stop=args.early_stop, log_interval=args.log_interval, save_path=args.save_path, 
-        plots_dir=args.plots_dir, cosine=args.cosine)
+    train_similarity(model, train_loader, valid_loader, device=args.device, augmentation=args.augmentation,
+        alpha_max=args.alpha_max, seed=args.seed, train_batch_size=args.train_batch_size, 
+        valid_batch_size=args.valid_batch_size, loss_function=nn.MSELoss, epochs=args.epochs, 
+        lr=args.lr, step_size=args.step_size, gamma=args.gamma, early_stop=args.early_stop, log_interval=args.log_interval, 
+        save_path=args.save_path, plots_dir=args.plots_dir, cosine=args.cosine)
 
 if __name__ == '__main__':
     main()
