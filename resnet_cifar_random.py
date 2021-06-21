@@ -1,25 +1,15 @@
-#Code based on tutorial by Marcin Zablocki and PyTorch example code
-#https://zablo.net/blog/post/pytorch-resnet-mnist-jupyter-notebook-2021/
-#https://github.com/pytorch/examples/blob/master/mnist/main.py
-
+#What happens if we learn a linear classifier on top of a randomly initialized ResNet18 for CIFAR?
 import argparse
 import torch
 import numpy as np
-from torchvision.models import resnet18
 from torch import nn
+from resnet_mnist import ResNet18MNIST
+from resnet_cifar_distillation import ResNet18MNISTEmbedder
+from resnet_mnist_distilled_classifier import ResNet18DistilledClassifier
+from torchvision.models import resnet18
 from mnist import mnist_train_loader
 from training import train_sup
 from logger import Logger
-
-class ResNet18MNIST(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = resnet18(num_classes=10)
-        #Set number of input channels to 1 (since MNIST images are greyscale)
-        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
-
-    def forward(self, x):
-        return self.model(x)
 
 def get_args(parser):
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
@@ -57,10 +47,10 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('teacher', 'mnist', args)
+    logger = Logger('random', 'cifar', args)
 
-    #Initialize the model
-    model = ResNet18MNIST()
+    #Randomly initialized ResNet18 with frozen embedder, learnable linear layer
+    model = ResNet18DistilledClassifier(ResNet18Embedder(resnet18(num_classes=10)))
 
     #Get the data
     train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
@@ -69,9 +59,8 @@ def main():
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr,
-        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, 
-        logger=logger, save_path=logger.get_model_path(), plots_dir=logger.get_plots_dir())
+        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr, patience=args.patience,
+        early_stop=args.early_stop, log_interval=args.log_interval, logger=logger)
 
 if __name__ == '__main__':
     main()

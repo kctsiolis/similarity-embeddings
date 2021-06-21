@@ -1,25 +1,12 @@
-#Code based on tutorial by Marcin Zablocki and PyTorch example code
-#https://zablo.net/blog/post/pytorch-resnet-mnist-jupyter-notebook-2021/
-#https://github.com/pytorch/examples/blob/master/mnist/main.py
-
 import argparse
+import sys
 import torch
 import numpy as np
 from torchvision.models import resnet18
 from torch import nn
-from mnist import mnist_train_loader
+from cifar import cifar_train_loader
 from training import train_sup
 from logger import Logger
-
-class ResNet18MNIST(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = resnet18(num_classes=10)
-        #Set number of input channels to 1 (since MNIST images are greyscale)
-        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
-
-    def forward(self, x):
-        return self.model(x)
 
 def get_args(parser):
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
@@ -44,10 +31,13 @@ def get_args(parser):
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     args = parser.parse_args()
 
+    #Store the command
+    args.command = 'python ' + ' '.join(sys.argv)
+
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for MNIST')
+    parser = argparse.ArgumentParser(description='ResNet-18 for CIFAR-10')
     args = get_args(parser)
 
     #Set random seed
@@ -57,13 +47,13 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('teacher', 'mnist', args)
+    logger = Logger('teacher', 'cifar', args)
 
     #Initialize the model
-    model = ResNet18MNIST()
+    model = resnet18(num_classes=10)
 
     #Get the data
-    train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)
 
     #Train the model
@@ -71,7 +61,7 @@ def main():
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
         loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr,
         patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, 
-        logger=logger, save_path=logger.get_model_path(), plots_dir=logger.get_plots_dir())
+        logger=logger)
 
 if __name__ == '__main__':
     main()

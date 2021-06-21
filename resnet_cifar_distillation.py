@@ -1,21 +1,38 @@
+#Some code taken from Torch tutorial on classification for CIFAR-10
+#https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+import argparse
 import torch
 import numpy as np
-import argparse
-from torch import nn
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision.models import resnet18
+from cifar import cifar_train_loader
 from training import train_distillation
-from resnet_mnist import ResNet18MNIST
-from mnist import mnist_train_loader
 from logger import Logger
 
-#ResNet that produces embeddings for MNIST images (not predictions)
-class ResNet18MNISTEmbedder(nn.Module):
+class ResNet18Embedder(nn.Module):
     def __init__(self, model):
         super().__init__()
-        self.features = nn.Sequential(*list(model.model.children())[:-1])
+        self.features = nn.Sequential(*list(model.children())[:-1])
 
     def forward(self, x):
         x = self.features(x)
         x = torch.flatten(x, 1)
+        return x
+
+class ConvNetEmbedder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+
+    #Get the embedding
+    def embed(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = torch.flatten(x, 1) # flatten all dimensions except batch
         return x
 
 def get_args(parser):
@@ -30,7 +47,7 @@ def get_args(parser):
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
     parser.add_argument('--patience', type=int,
-                        help='Patience used in Plateau scheduler.')
+                        help='Patience used in the Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
     parser.add_argument('--early-stop', type=int, default=5, metavar='E',
@@ -41,14 +58,17 @@ def get_args(parser):
                         help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
+    parser.add_argument('--small-student', action='store_true',
+                        help='Use a small student model (vanilla CNN with 2 conv and pooling layers).')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
+
     args = parser.parse_args()
 
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for MNIST')
+    parser = argparse.ArgumentParser(description='Distilling a ResNet-18 for CIFAR-10')
     args = get_args(parser)
 
     #Set random seed
@@ -58,21 +78,21 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('distillation', 'mnist', args)
+    logger = Logger('distillation', 'cifar', args)
 
-    if args.load_path is None:
-        return ValueError('Path to teacher network is required.')
+    if args.small_student:
+        student = ConvNetEmbedder()
+    else:
+        student = ResNet18Embedder(resnet18(num_classes=10))
 
-    student = ResNet18MNISTEmbedder(ResNet18MNIST())
-    teacher = ResNet18MNIST()
+    teacher = resnet18(num_classes=10)
     teacher.load_state_dict(torch.load(args.load_path))
-    #We just need the teacher's embedder
-    teacher = ResNet18MNISTEmbedder(teacher)
+    teacher = ResNet18Embedder(teacher)
 
-    train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)
 
-    train_distillation(student, teacher, train_loader, valid_loader, device=args.device,
+    train_distillation(student, teacher, train_loader, valid_loader, device=args.device, 
     train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
     loss_function=nn.MSELoss, epochs=args.epochs, lr=args.lr, patience=args.patience, 
     early_stop=args.early_stop, log_interval=args.log_interval, logger=logger, cosine=args.cosine)

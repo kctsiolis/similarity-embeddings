@@ -1,25 +1,13 @@
-#Code based on tutorial by Marcin Zablocki and PyTorch example code
-#https://zablo.net/blog/post/pytorch-resnet-mnist-jupyter-notebook-2021/
-#https://github.com/pytorch/examples/blob/master/mnist/main.py
-
 import argparse
+from resnet_mnist import ResNet18MNIST
+from resnet_cifar_distillation import ResNet18Embedder
+from mnist import mnist_train_loader
+from training import train_similarity
 import torch
 import numpy as np
 from torchvision.models import resnet18
 from torch import nn
-from mnist import mnist_train_loader
-from training import train_sup
 from logger import Logger
-
-class ResNet18MNIST(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.model = resnet18(num_classes=10)
-        #Set number of input channels to 1 (since MNIST images are greyscale)
-        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
-
-    def forward(self, x):
-        return self.model(x)
 
 def get_args(parser):
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
@@ -40,8 +28,19 @@ def get_args(parser):
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--load-path', type=str,
+                        help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
+    parser.add_argument('--cosine', action='store_true',
+                        help='Use cosine similarity in the distillation loss.')
+    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
+                        help='Augmentation to use.')
+    parser.add_argument('--alpha-max', type=int, default=None,
+                        help='Largest possible augmentation strength.')
+    parser.add_argument('--beta', type=float, default=0.2,
+                        help='Parameter of similarity probability function p(alpha).')
+
     args = parser.parse_args()
 
     return args
@@ -57,21 +56,18 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('teacher', 'mnist', args)
+    logger = Logger('similarity', 'cifar', args)
 
-    #Initialize the model
-    model = ResNet18MNIST()
+    model = ResNet18Embedder(resnet18(num_classes=10))
 
-    #Get the data
     train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)
 
-    #Train the model
-    train_sup(model, train_loader, valid_loader, device=args.device,
-        train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr,
-        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, 
-        logger=logger, save_path=logger.get_model_path(), plots_dir=logger.get_plots_dir())
+    train_similarity(model, train_loader, valid_loader, device=args.device, augmentation=args.augmentation,
+        alpha_max=args.alpha_max, train_batch_size=args.train_batch_size, 
+        valid_batch_size=args.valid_batch_size, loss_function=nn.MSELoss, epochs=args.epochs, 
+        lr=args.lr, patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, 
+        logger=logger, cosine=args.cosine)
 
 if __name__ == '__main__':
     main()

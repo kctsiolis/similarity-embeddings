@@ -3,28 +3,31 @@
 #https://github.com/pytorch/examples/blob/master/mnist/main.py
 
 import torch
+import numpy as np
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from matplotlib import pyplot as plt
 from data_augmentation import augment
+from logger import Logger
 
 #Supervised training loop
-def train_sup(model, train_loader, valid_loader, device='cpu', seed=42, train_batch_size=64, 
+def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=64, 
     valid_batch_size=1000, loss_function=nn.CrossEntropyLoss, epochs=20, lr=0.1,
-    step_size=5, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None):
-    
-    torch.manual_seed(seed)
+    patience=5, early_stop=5, log_interval=10, logger=None):
+
     device = torch.device(device)
     print("Running on device {}".format(device))
     model = model.to(device)
 
+    save_path = logger.get_model_path()
+
     #TODO: Generalize this to any optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+    scheduler = ReduceLROnPlateau(optimizer, patience=patience)
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -34,9 +37,9 @@ def train_sup(model, train_loader, valid_loader, device='cpu', seed=42, train_ba
     epochs_until_stop = early_stop
 
     for epoch in range(1, epochs + 1):
-        train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval)
-        train_loss, train_acc = predict(model, device, train_loader, loss_function, "Train")
-        val_loss, val_acc = predict(model, device, valid_loader, loss_function, "Validation")
+        train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval, logger)
+        train_loss, train_acc = predict(model, device, train_loader, loss_function, logger, "Train")
+        val_loss, val_acc = predict(model, device, valid_loader, loss_function, logger, "Validation")
 
         train_losses.append(train_loss)
         train_accs.append(train_acc)
@@ -53,31 +56,31 @@ def train_sup(model, train_loader, valid_loader, device='cpu', seed=42, train_ba
 
             #Save the current model (as it is the best one so far)
             if save_path is not None:
-                print("Saving model...")
+                logger.log("Saving model...")
                 torch.save(model.state_dict(), save_path)
-                print("Model saved.\n")
+                logger.log("Model saved.\n")
 
-        scheduler.step()
+        scheduler.step(val_loss)
 
-    train_report(train_losses, val_losses, train_accs, val_accs, plots_dir)
+    train_report(train_losses, val_losses, train_accs, val_accs, logger=logger)
 
     return train_losses, train_accs, val_losses, val_accs
 
 def train_distillation(student, teacher, train_loader, valid_loader, device='cpu', 
-    seed=42, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
-    lr=0.1, step_size=5, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None, 
-    cosine=False):
+    train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
+    lr=0.1, patience=5, early_stop=5, log_interval=10, logger=None, cosine=False):
 
-    torch.manual_seed(seed)
     device = torch.device(device)
     print("Running on device {}".format(device))
     student = student.to(device)
     teacher = teacher.to(device)
 
+    save_path = logger.get_model_path()
+
     #TODO: Generalize this to any optimizer
     optimizer = optim.Adam(student.parameters(), lr=lr)
 
-    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+    scheduler = ReduceLROnPlateau(optimizer, patience=patience)
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -86,11 +89,11 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
     for epoch in range(1, epochs + 1):
         train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
-            optimizer, epoch, log_interval, cosine)
+            optimizer, epoch, log_interval, logger, cosine)
         train_loss = compute_distillation_loss(student, teacher, device, train_loader, 
-            loss_function, cosine, "Training")
+            loss_function, cosine, logger, "Training")
         val_loss = compute_distillation_loss(student, teacher, device, valid_loader, 
-            loss_function, cosine, "Validation")
+            loss_function, cosine, logger, "Validation")
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -105,30 +108,31 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
             #Save the current model (as it is the best one so far)
             if save_path is not None:
-                print("Saving model...")
+                logger.log("Saving model...")
                 torch.save(student.state_dict(), save_path)
-                print("Model saved.\n")
+                logger.log("Model saved.\n")
 
-        scheduler.step()
+        scheduler.step(val_loss)
 
-    train_report(train_losses, val_losses, save_dir=plots_dir)
+    train_report(train_losses, val_losses, logger=logger)
 
     return train_losses, val_losses
 
 #Supervised training loop
 def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur-sigma',
-    alpha_max=10, seed=42, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
-    lr=0.1, step_size=5, gamma=0.1, early_stop=5, log_interval=10, save_path=None, plots_dir=None, cosine=False):
+    alpha_max=10, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
+    lr=0.1, patience=5, early_stop=5, log_interval=10, logger=None, cosine=False):
     
-    torch.manual_seed(seed)
     device = torch.device(device)
     print("Running on device {}".format(device))
     model = model.to(device)
 
+    save_path = logger.get_model_path()
+
     #TODO: Generalize this to any optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    scheduler = StepLR(optimizer, step_size=step_size, gamma=gamma)
+    scheduler = ReduceLROnPlateau(optimizer, patience=patience)
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -137,11 +141,11 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
     for epoch in range(1, epochs + 1):
         train_similarity_epoch(model, device, train_loader, train_batch_size, loss_function, 
-            optimizer, epoch, log_interval, augmentation, alpha_max, cosine)
+            optimizer, epoch, log_interval, logger, augmentation, alpha_max, cosine)
         train_loss = compute_similarity_loss(model, device, train_loader, loss_function, 
-            augmentation, alpha_max, cosine, "Train")
+            augmentation, alpha_max, cosine, logger, "Train")
         val_loss = compute_similarity_loss(model, device, valid_loader, loss_function, 
-            augmentation, alpha_max, cosine, "Validation")
+            augmentation, alpha_max, cosine, logger, "Validation")
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -156,18 +160,18 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
             #Save the current model (as it is the best one so far)
             if save_path is not None:
-                print("Saving model...")
+                logger.log("Saving model...")
                 torch.save(model.state_dict(), save_path)
-                print("Model saved.\n")
+                logger.log("Model saved.\n")
 
-        scheduler.step()
+        scheduler.step(val_loss)
 
-    train_report(train_losses, val_losses, save_dir=plots_dir)
+    train_report(train_losses, val_losses, logger=logger)
 
     return train_losses, val_losses
 
 #Epoch of supervised training
-def train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval):
+def train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval, logger):
     model.train()
     loss_function = loss_function() #Instantiate loss
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -178,14 +182,14 @@ def train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
-            print('Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
+            log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item())
-            )
+            logger.log(log_str)
 
 #Epoch of disatillation training (similarity-preserving)
 def train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
-    optimizer, epoch, log_interval, cosine):
+    optimizer, epoch, log_interval, logger, cosine):
     student.train()
     teacher.eval()
     loss_fn = loss_function()
@@ -197,14 +201,14 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
-            print('Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
+            log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item())
-            )
+            logger.log(log_str)
 
 #Epoch of similarity training
 def train_similarity_epoch(model, device, train_loader, batch_size,
-    loss_function, optimizer, epoch, log_interval, augmentation, alpha_max, cosine):
+    loss_function, optimizer, epoch, log_interval, logger, augmentation, alpha_max, cosine):
     model.train()
     loss_function = loss_function() #Instantiate loss
     if not cosine:
@@ -214,18 +218,18 @@ def train_similarity_epoch(model, device, train_loader, batch_size,
         data = data.to(device)
         optimizer.zero_grad()
         augmented_data, sim_prob = augment(data, augmentation, alpha_max, device=device)
-        output = get_model_similarity(model, data, augmented_data, cosine)
+        output = get_model_similarity(model, data, augmented_data, cosine) 
         loss = loss_function(output, sim_prob.detach())
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
-            print('Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
+            log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item())
-            )
+            logger.log(log_str)
 
 #Evaluation on data
-def predict(model, device, loader, loss_function, subset):
+def predict(model, device, loader, loss_function, logger, subset):
     model.eval()
     loss_function = loss_function(reduction='sum')
     loss = 0
@@ -242,9 +246,9 @@ def predict(model, device, loader, loss_function, subset):
 
     acc = 100.00 * correct/ len(loader.dataset)
 
-    print('\n{} set: Average loss: {:.6f}, Accuracy: {}/{} ({:.2f}%)\n'.format(subset,
-        loss, correct, len(loader.dataset), acc
-    ))
+    log_str = '\n{} set: Average loss: {:.6f}, Accuracy: {}/{} ({:.2f}%)\n'.format(subset,
+        loss, correct, len(loader.dataset), acc)
+    logger.log(log_str)
 
     return loss, acc
 
@@ -301,7 +305,8 @@ def get_model_similarity(model, data, augmented_data, cosine):
         augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
     model_sims = torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
     if cosine:
-        #Cosine similarity will already be between 0 and 1 due to non-negativity of embeddings
+        #Map cosine similarity to [0,1]
+        #output = (model_sims + 1) / 2
         output = model_sims
     else: #Use sigmoid to map similarities to (0,1)
         sigmoid = nn.Sigmoid()
@@ -310,7 +315,8 @@ def get_model_similarity(model, data, augmented_data, cosine):
     return output
 
 #Compute loss over the entire set
-def compute_distillation_loss(student, teacher, device, loader, loss_function, cosine, subset):
+def compute_distillation_loss(student, teacher, device, loader, loss_function, 
+    cosine, logger, subset):
     student.eval()
     teacher.eval()
     loss_function = loss_function()
@@ -323,11 +329,13 @@ def compute_distillation_loss(student, teacher, device, loader, loss_function, c
 
     loss = np.mean(losses)
 
-    print('\n{} set: Average loss: {:.6f}\n'.format(subset, loss))
+    log_str = '\n{} set: Average loss: {:.6f}\n'.format(subset, loss)
+    logger.log(log_str)
 
     return loss
 
-def compute_similarity_loss(model, device, loader, loss_function, augmentation, alpha_max, cosine, subset):
+def compute_similarity_loss(model, device, loader, loss_function, augmentation, alpha_max, 
+    cosine, logger, subset):
     model.eval()
     loss_function = loss_function()
     losses = []
@@ -340,23 +348,25 @@ def compute_similarity_loss(model, device, loader, loss_function, augmentation, 
 
     loss = np.mean(losses)
 
-    print('\n{} set: Average loss: {:.6f}\n'.format(subset, loss))
+    log_str = '\n{} set: Average loss: {:.6f}\n'.format(subset, loss)
+    logger.log(log_str)
 
     return loss
             
 
-def train_report(train_losses, val_losses, train_accs=None, val_accs=None, save_dir=None):
+def train_report(train_losses, val_losses, train_accs=None, val_accs=None, logger=None):
     best_epoch = np.argmin(val_losses)
-    print("Training complete.\n")
-    print("Best Epoch: {}".format(best_epoch + 1))
-    print("Training Loss: {:.6f}".format(train_losses[best_epoch]))
+    logger.log("Training complete.\n")
+    logger.log_results("Best Epoch: {}".format(best_epoch + 1))
+    logger.log_results("Training Loss: {:.6f}".format(train_losses[best_epoch]))
     if train_accs is not None:
-        print("Training Accuracy: {:.2f}".format(train_accs[best_epoch]))
-    print("Validation Loss: {:.6f}".format(val_losses[best_epoch]))
+        logger.log_results("Training Accuracy: {:.2f}".format(train_accs[best_epoch]))
+    logger.log_results("Validation Loss: {:.6f}".format(val_losses[best_epoch]))
     if val_accs is not None:
-        print("Validation Accuracy: {:.2f}".format(val_accs[best_epoch]))
+        logger.log_results("Validation Accuracy: {:.2f}".format(val_accs[best_epoch]))
 
     #Save loss and accuracy plots
+    save_dir = logger.get_plots_dir()
     if save_dir is not None:
         train_plots(train_losses, val_losses, "Loss", save_dir)
         if train_accs is not None and val_accs is not None:
