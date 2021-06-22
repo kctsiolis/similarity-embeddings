@@ -1,7 +1,7 @@
 import argparse
 from resnet_mnist import ResNet18MNIST
 from resnet_cifar_distillation import ResNet18Embedder
-from mnist import mnist_train_loader
+from cifar import cifar_train_loader
 from training import train_similarity
 import torch
 import numpy as np
@@ -34,6 +34,10 @@ def get_args(parser):
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
+    parser.add_argument('--loss', type=str, choices=['mse', 'kl'], default='mse',
+                        help='Type of loss function to use.')
+    parser.add_argument('--temp', type=float, default=1.0,
+                        help='Temperature in sigmoid function converting similarity score to probability.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
                         help='Augmentation to use.')
     parser.add_argument('--alpha-max', type=int, default=None,
@@ -60,14 +64,19 @@ def main():
 
     model = ResNet18Embedder(resnet18(num_classes=10))
 
-    train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)
+
+    if args.loss == 'mse':
+        loss_function = nn.MSELoss()
+    else:
+        loss_function = nn.KLDivLoss(reduction='batchmean')
 
     train_similarity(model, train_loader, valid_loader, device=args.device, augmentation=args.augmentation,
         alpha_max=args.alpha_max, train_batch_size=args.train_batch_size, 
-        valid_batch_size=args.valid_batch_size, loss_function=nn.MSELoss, epochs=args.epochs, 
+        valid_batch_size=args.valid_batch_size, loss_function=loss_function, epochs=args.epochs, 
         lr=args.lr, optimizer_choice=args.optimizer, patience=args.patience, early_stop=args.early_stop, 
-        log_interval=args.log_interval, logger=logger, cosine=args.cosine)
+        log_interval=args.log_interval, logger=logger, cosine=args.cosine, temp=args.temp)
 
 if __name__ == '__main__':
     main()

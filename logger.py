@@ -25,8 +25,15 @@ class Logger:
     def make_header(self, type, args):
         self.log_file.write('Experiment Time: {}\n'.format(datetime.now()))
         self.log_file.write('Type: {}\n'.format(type))
+        if type == 'teacher' or type == 'linear_classifier' or type == 'random':
+            self.log_file.write('Loss Function: Cross Entropy\n')
+        elif type == 'distillation':
+            self.log_file.write('Loss Function: MSE\n')
+        else:
+            self.log_file.write('Loss Function: {}\n'.format(args.loss))
         self.log_file.write('Train Batch Size: {}\n'.format(args.train_batch_size))
         self.log_file.write('Learning Rate : {}\n'.format(args.lr))
+        self.log_file.write('Optimizer: {}\n'.format(args.optimizer))
         self.log_file.write('Seed: {}\n'.format(args.seed))
         self.log_file.write('Max Epochs: {}\n'.format(args.epochs))
         self.log_file.write('Scheduler Patience: {}\n'.format(args.patience))
@@ -58,12 +65,13 @@ class Logger:
         return self.plots_dir
 
 def make_log_dir(type, dataset, args):
-    exp_name_start = '{}_{}_batch={}_lr={}_seed={}'.format(type, dataset,
-        args.train_batch_size, args.lr, args.seed)
+    exp_name_start = '{}_{}_batch={}_lr={}_optim={},seed={}'.format(type, dataset,
+        args.train_batch_size, args.lr, args.optimizer, args.seed)
     if type == 'similarity' or type == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
     if type == 'similarity':
-        exp_name_augmentation = exp_name_cosine + '_augmentation={}'.format(args.augmentation)
+        exp_name_loss = exp_name_cosine + '_loss={}'.format(args.loss)
+        exp_name_augmentation = exp_name_loss + '_augmentation={}'.format(args.augmentation)
         exp_name_alphamax = exp_name_augmentation + '_alphamax={}'.format(args.alpha_max)
         exp_name_beta = exp_name_alphamax + '_beta={}'.format(args.beta)
         dir = os.path.join(LOGS_DIR, exp_name_beta)

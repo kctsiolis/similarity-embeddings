@@ -92,7 +92,7 @@ def main():
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
+        loss_function=nn.CrossEntropyLoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
         patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, 
         logger=logger)
 

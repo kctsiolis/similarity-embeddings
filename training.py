@@ -129,9 +129,9 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
 #Supervised training loop
 def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur-sigma',
-    alpha_max=10, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
+    alpha_max=15, beta=0.2, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
     lr=0.1, optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, logger=None, 
-    cosine=False):
+    cosine=False, temp=1):
     
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -155,11 +155,11 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
     for epoch in range(1, epochs + 1):
         train_similarity_epoch(model, device, train_loader, train_batch_size, loss_function, 
-            optimizer, epoch, log_interval, logger, augmentation, alpha_max, cosine)
+            optimizer, epoch, log_interval, logger, augmentation, alpha_max, beta, cosine, temp)
         train_loss = compute_similarity_loss(model, device, train_loader, loss_function, 
-            augmentation, alpha_max, cosine, logger, "Train")
+            augmentation, alpha_max, cosine, temp, logger, "Train")
         val_loss = compute_similarity_loss(model, device, valid_loader, loss_function, 
-            augmentation, alpha_max, cosine, logger, "Validation")
+            augmentation, alpha_max, cosine, temp, logger, "Validation")
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -187,7 +187,6 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 #Epoch of supervised training
 def train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval, logger):
     model.train()
-    loss_function = loss_function() #Instantiate loss
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -206,7 +205,6 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
     optimizer, epoch, log_interval, logger, cosine):
     student.train()
     teacher.eval()
-    loss_fn = loss_function()
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
@@ -221,19 +219,24 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
             logger.log(log_str)
 
 #Epoch of similarity training
-def train_similarity_epoch(model, device, train_loader, batch_size,
-    loss_function, optimizer, epoch, log_interval, logger, augmentation, alpha_max, cosine):
+def train_similarity_epoch(model, device, train_loader, batch_size, loss_function, 
+    optimizer, epoch, log_interval, logger, augmentation, alpha_max, beta, cosine, temp):
     model.train()
-    loss_function = loss_function() #Instantiate loss
-    if not cosine:
-        #Use the sigmoid function to map outputs to (0,1)
-        sigmoid = nn.Sigmoid()
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        augmented_data, sim_prob = augment(data, augmentation, alpha_max, device=device)
-        output = get_model_similarity(model, data, augmented_data, cosine) 
-        loss = loss_function(output, sim_prob.detach())
+        augmented_data, sim_prob = augment(data, augmentation, alpha_max, beta, device=device)
+        output = get_model_similarity(model, data, augmented_data, cosine)
+        if isinstance(loss_function, nn.KLDivLoss):
+            #KL Divergence expects output to be log probability distribution
+            eps = 1e-7
+            output_comp = 1 - output
+            output = torch.stack((output, output_comp), dim=1)
+            sim_prob_comp = 1 - sim_prob
+            sim_prob = torch.stack((sim_prob, sim_prob_comp), dim=1)
+            loss = loss_function((output+eps).log(), sim_prob.detach())
+        else:
+            loss = loss_function(output, sim_prob.detach())
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -246,17 +249,17 @@ def train_similarity_epoch(model, device, train_loader, batch_size,
 def predict(model, device, loader, loss_function, logger, subset):
     model.eval()
     loss_function = loss_function(reduction='sum')
-    loss = 0
+    losses = []
     correct = 0
     with torch.no_grad():
         for data, target in loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            loss += loss_function(output, target).item()
+            losses.append(loss_function(output, target).item())
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
     
-    loss /= len(loader.dataset)
+    loss = np.mean(losses)
 
     acc = 100.00 * correct/ len(loader.dataset)
 
@@ -309,7 +312,7 @@ def get_student_teacher_similarity(student, teacher, data, cosine):
     
 
 #Get normalized similarities between original and augmented data, as predicted by the model 
-def get_model_similarity(model, data, augmented_data, cosine):
+def get_model_similarity(model, data, augmented_data, cosine, temp=1):
     #Get embeddings of original data
     data_embs = model(data)
     #Get embeddings of augmented data
@@ -319,12 +322,9 @@ def get_model_similarity(model, data, augmented_data, cosine):
         augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
     model_sims = torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
     if cosine:
-        #Map cosine similarity to [0,1]
-        #output = (model_sims + 1) / 2
         output = model_sims
-    else: #Use sigmoid to map similarities to (0,1)
-        sigmoid = nn.Sigmoid()
-        output = sigmoid(model_sims)
+    else: #Use tempered sigmoid to map scores to (0,1)
+        output = 1 / (1 + torch.exp(-temp * model_sims))
 
     return output
 
@@ -333,7 +333,6 @@ def compute_distillation_loss(student, teacher, device, loader, loss_function,
     cosine, logger, subset):
     student.eval()
     teacher.eval()
-    loss_function = loss_function()
     losses = []
     with torch.no_grad():
         for data, _ in loader:
@@ -349,16 +348,24 @@ def compute_distillation_loss(student, teacher, device, loader, loss_function,
     return loss
 
 def compute_similarity_loss(model, device, loader, loss_function, augmentation, alpha_max, 
-    cosine, logger, subset):
+    cosine, temp, logger, subset):
     model.eval()
-    loss_function = loss_function()
     losses = []
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
             augmented_data, sim_prob = augment(data, augmentation, alpha_max, device=device)
-            output = get_model_similarity(model, data, augmented_data, cosine)
-            losses.append(loss_function(output, sim_prob).item())
+            output = get_model_similarity(model, data, augmented_data, cosine, temp)
+            if isinstance(loss_function, nn.KLDivLoss):
+                #KL Divergence expects output to be log probability distribution
+                eps = 1e-7
+                output_comp = 1 - output
+                output = torch.stack((output, output_comp), dim=1)
+                sim_prob_comp = 1 - sim_prob
+                sim_prob = torch.stack((sim_prob, sim_prob_comp), dim=1)
+                losses.append(loss_function((output+eps).log(), sim_prob.detach()).item())
+            else:
+                losses.append(loss_function(output, sim_prob.detach()).item())
 
     loss = np.mean(losses)
 
@@ -367,7 +374,6 @@ def compute_similarity_loss(model, device, loader, loss_function, augmentation, 
 
     return loss
             
-
 def train_report(train_losses, val_losses, train_accs=None, val_accs=None, logger=None):
     best_epoch = np.argmin(val_losses)
     logger.log("Training complete.\n")
