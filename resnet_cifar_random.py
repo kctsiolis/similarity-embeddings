@@ -4,10 +4,10 @@ import torch
 import numpy as np
 from torch import nn
 from resnet_mnist import ResNet18MNIST
-from resnet_cifar_distillation import ResNet18MNISTEmbedder
+from resnet_cifar_distillation import ResNet18Embedder
 from resnet_mnist_distilled_classifier import ResNet18DistilledClassifier
 from torchvision.models import resnet18
-from mnist import mnist_train_loader
+from cifar import cifar_train_loader
 from training import train_sup
 from logger import Logger
 
@@ -22,6 +22,8 @@ def get_args(parser):
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
+    parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
+                        help='Choice of optimizer for training.')
     parser.add_argument('--patience', type=int,
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -53,14 +55,14 @@ def main():
     model = ResNet18DistilledClassifier(ResNet18Embedder(resnet18(num_classes=10)))
 
     #Get the data
-    train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr, patience=args.patience,
-        early_stop=args.early_stop, log_interval=args.log_interval, logger=logger)
+        loss_function=nn.CrossEntropyLoss, epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
+        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, logger=logger)
 
 if __name__ == '__main__':
     main()

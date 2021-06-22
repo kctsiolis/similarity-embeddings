@@ -20,6 +20,8 @@ def get_args(parser):
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
+    parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
+                        help='Choice of optimizer for training.')
     parser.add_argument('--patience', type=int,
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -28,8 +30,6 @@ def get_args(parser):
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--load-path', type=str,
-                        help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--cosine', action='store_true',
@@ -66,8 +66,8 @@ def main():
     train_similarity(model, train_loader, valid_loader, device=args.device, augmentation=args.augmentation,
         alpha_max=args.alpha_max, train_batch_size=args.train_batch_size, 
         valid_batch_size=args.valid_batch_size, loss_function=nn.MSELoss, epochs=args.epochs, 
-        lr=args.lr, patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, 
-        logger=logger, cosine=args.cosine)
+        lr=args.lr, optimizer_choice=args.optimizer, patience=args.patience, early_stop=args.early_stop, 
+        log_interval=args.log_interval, logger=logger, cosine=args.cosine)
 
 if __name__ == '__main__':
     main()

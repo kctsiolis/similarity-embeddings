@@ -16,7 +16,7 @@ from logger import Logger
 #Supervised training loop
 def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=64, 
     valid_batch_size=1000, loss_function=nn.CrossEntropyLoss, epochs=20, lr=0.1,
-    patience=5, early_stop=5, log_interval=10, logger=None):
+    optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, logger=None):
 
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -24,8 +24,12 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
 
     save_path = logger.get_model_path()
 
-    #TODO: Generalize this to any optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    if optimizer_choice == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    elif optimizer_choice == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+    else:
+        raise ValueError('Only Adam and SGD optimizers are supported.')
 
     scheduler = ReduceLROnPlateau(optimizer, patience=patience)
 
@@ -68,7 +72,8 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
 
 def train_distillation(student, teacher, train_loader, valid_loader, device='cpu', 
     train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
-    lr=0.1, patience=5, early_stop=5, log_interval=10, logger=None, cosine=False):
+    lr=0.1, optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, 
+    logger=None, cosine=False):
 
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -77,8 +82,12 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
     save_path = logger.get_model_path()
 
-    #TODO: Generalize this to any optimizer
-    optimizer = optim.Adam(student.parameters(), lr=lr)
+    if optimizer_choice == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    elif optimizer_choice == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+    else:
+        raise ValueError('Only Adam and SGD optimizers are supported.')
 
     scheduler = ReduceLROnPlateau(optimizer, patience=patience)
 
@@ -121,7 +130,8 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 #Supervised training loop
 def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur-sigma',
     alpha_max=10, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
-    lr=0.1, patience=5, early_stop=5, log_interval=10, logger=None, cosine=False):
+    lr=0.1, optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, logger=None, 
+    cosine=False):
     
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -129,8 +139,12 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
     save_path = logger.get_model_path()
 
-    #TODO: Generalize this to any optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    if optimizer_choice == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    elif optimizer_choice == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+    else:
+        raise ValueError('Only Adam and SGD optimizers are supported.')
 
     scheduler = ReduceLROnPlateau(optimizer, patience=patience)
 

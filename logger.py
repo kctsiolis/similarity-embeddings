@@ -32,7 +32,7 @@ class Logger:
         self.log_file.write('Scheduler Patience: {}\n'.format(args.patience))
         self.log_file.write('Early Stopping Patience: {}\n'.format(args.early_stop))
         self.log_file.write('Device: {}\n'.format(args.device))
-        if type == 'similarity' or type == 'distillation' or type == 'linear_classifier':
+        if type == 'distillation' or type == 'linear_classifier':
            self.log_file.write('Load Path: {}\n'.format(args.load_path))
         if type == 'similarity' or type == 'distillation':
             self.log_file.write('Cosine Similarity: {}\n'.format(args.cosine))
@@ -65,7 +65,7 @@ def make_log_dir(type, dataset, args):
     if type == 'similarity':
         exp_name_augmentation = exp_name_cosine + '_augmentation={}'.format(args.augmentation)
         exp_name_alphamax = exp_name_augmentation + '_alphamax={}'.format(args.alpha_max)
-        exp_name_beta = exp_name_alpha_max + '_beta={}'.format(args.beta)
+        exp_name_beta = exp_name_alphamax + '_beta={}'.format(args.beta)
         dir = os.path.join(LOGS_DIR, exp_name_beta)
     elif type == 'distillation':
         dir = os.path.join(LOGS_DIR, exp_name_cosine)
