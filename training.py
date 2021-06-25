@@ -32,6 +32,7 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
     scheduler = ReduceLROnPlateau(optimizer, patience=patience)
+    plateau_factor = 0.1
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -39,6 +40,9 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
     val_losses = []
     val_accs = []
     epochs_until_stop = early_stop
+
+    #Keep track of changes in learning rate
+    change_epochs = []
 
     for epoch in range(1, epochs + 1):
         train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval, logger)
@@ -66,7 +70,12 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
 
         scheduler.step(val_loss)
 
-    train_report(train_losses, val_losses, train_accs, val_accs, logger=logger)
+        if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
+            change_epochs.append(epoch)
+            lr = plateau_factor * lr
+            logger.log("Learning rate decreasing to {}\n".format(lr))
+
+    train_report(train_losses, val_losses, train_accs, val_accs, change_epochs=change_epochs, logger=logger)
 
     return train_losses, train_accs, val_losses, val_accs
 
@@ -90,11 +99,14 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
     scheduler = ReduceLROnPlateau(optimizer, patience=patience)
+    plateau_factor = 0.1
 
     #Keep track of losses and accuracies
     train_losses = []
     val_losses = []
     epochs_until_stop = early_stop
+
+    change_epochs = []
 
     for epoch in range(1, epochs + 1):
         train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
@@ -123,7 +135,12 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
         scheduler.step(val_loss)
 
-    train_report(train_losses, val_losses, logger=logger)
+        if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
+            change_epochs.append(epoch)
+            lr = plateau_factor * lr
+            logger.log("Learning rate decreasing to {}\n".format(lr))
+
+    train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 
     return train_losses, val_losses
 
@@ -147,11 +164,14 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
     scheduler = ReduceLROnPlateau(optimizer, patience=patience)
+    plateau_factor = 0.1
 
     #Keep track of losses and accuracies
     train_losses = []
     val_losses = []
     epochs_until_stop = early_stop
+
+    change_epochs = []
 
     for epoch in range(1, epochs + 1):
         train_similarity_epoch(model, device, train_loader, train_batch_size, loss_function, 
@@ -180,7 +200,12 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
         scheduler.step(val_loss)
 
-    train_report(train_losses, val_losses, logger=logger)
+        if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
+            change_epochs.append(epoch)
+            lr = plateau_factor * lr
+            logger.log("Learning rate decreasing to {}\n".format(lr))
+
+    train_report(train_losses, val_losses, chnage_epochs=change_epochs, logger=logger)
 
     return train_losses, val_losses
 
@@ -373,7 +398,7 @@ def compute_similarity_loss(model, device, loader, loss_function, augmentation, 
 
     return loss
             
-def train_report(train_losses, val_losses, train_accs=None, val_accs=None, logger=None):
+def train_report(train_losses, val_losses, train_accs=None, val_accs=None, change_epochs=None, logger=None):
     best_epoch = np.argmin(val_losses)
     logger.log("Training complete.\n")
     logger.log_results("Best Epoch: {}".format(best_epoch + 1))
@@ -387,16 +412,19 @@ def train_report(train_losses, val_losses, train_accs=None, val_accs=None, logge
     #Save loss and accuracy plots
     save_dir = logger.get_plots_dir()
     if save_dir is not None:
-        train_plots(train_losses, val_losses, "Loss", save_dir)
+        train_plots(train_losses, val_losses, "Loss", save_dir, change_epochs)
         if train_accs is not None and val_accs is not None:
-            train_plots(train_accs, val_accs, "Accuracy", save_dir)
+            train_plots(train_accs, val_accs, "Accuracy", save_dir, change_epochs)
 
 #Helper function for plots of accuracy vs. epochs and loss vs. epochs
-def train_plots(train_vals, val_vals, y_label, save_dir):
+def train_plots(train_vals, val_vals, y_label, save_dir, change_epochs):
     epochs = np.arange(1,len(train_vals)+1)
     plt.figure()
     plt.plot(epochs, train_vals, 'b-')
     plt.plot(epochs, val_vals, 'r-')
+    if change_epochs is not None:
+        for e in change_epochs:
+            plt.axvline(e, linestyle='--', color='0.8')
     plt.legend(['Training', 'Validation'])
     plt.xlabel('Epoch')
     plt.ylabel(y_label)
