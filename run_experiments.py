@@ -42,6 +42,8 @@ def get_args(parser):
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=[0.2], nargs='+',
                         help='Parameter of similarity probability function p(alpha).')
+    parser.add_argument('--small-student', action='store_true',
+                        help='Use a small student model (vanilla CNN with 2 conv and pooling layers) for distillation.')
 
     args = parser.parse_args()
 
@@ -81,6 +83,10 @@ def make_script(args):
         command_start += '--device {} '.format(args.device)
         if args.cosine:
             command_start += '--cosine '
+
+        if args.dataset == 'cifar' and (args.type == 'distillation' or args.type == 'linear_classifier'):
+            if args.small_student:
+                command_start += '--small-student '
 
         if args.type == 'similarity':
             command_start += '--augmentation {} '.format(args.augmentation)

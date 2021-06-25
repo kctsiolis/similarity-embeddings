@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from torch import nn
 from torchvision.models import resnet18
-from resnet_cifar_distillation import ResNet18MNISTEmbedder
+from resnet_cifar_distillation import ResNet18Embedder
 from resnet_cifar_distillation import ConvNetEmbedder
 from resnet_mnist_distilled_classifier import ResNet18DistilledClassifier
 from cifar import cifar_train_loader
@@ -61,7 +61,7 @@ def get_args(parser):
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for MNIST')
+    parser = argparse.ArgumentParser(description='ResNet-18 for CIFAR')
     args = get_args(parser)
 
     #Set random seed
@@ -81,7 +81,7 @@ def main():
         student.load_state_dict(torch.load(args.load_path))
         model = ConvNetDistilledClassifier(student)
     else:
-        student = ResNet18Embedder(resnet18)
+        student = ResNet18Embedder(resnet18(num_classes=10))
         student.load_state_dict(torch.load(args.load_path))        
         model = ResNet18DistilledClassifier(student)
     

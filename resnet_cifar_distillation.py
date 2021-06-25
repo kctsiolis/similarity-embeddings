@@ -29,7 +29,7 @@ class ConvNetEmbedder(nn.Module):
         self.conv2 = nn.Conv2d(6, 16, 5)
 
     #Get the embedding
-    def embed(self, x):
+    def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1) # flatten all dimensions except batch

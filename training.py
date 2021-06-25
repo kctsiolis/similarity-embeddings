@@ -83,9 +83,9 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
     save_path = logger.get_model_path()
 
     if optimizer_choice == 'adam':
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        optimizer = optim.Adam(student.parameters(), lr=lr)
     elif optimizer_choice == 'sgd':
-        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+        optimizer = optim.SGD(student.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
     else:
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
@@ -209,7 +209,7 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
         data = data.to(device)
         optimizer.zero_grad()
         student_sims, teacher_sims = get_student_teacher_similarity(student, teacher, data, cosine)
-        loss = loss_fn(student_sims, teacher_sims)
+        loss = loss_function(student_sims, teacher_sims)
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -248,7 +248,6 @@ def train_similarity_epoch(model, device, train_loader, batch_size, loss_functio
 #Evaluation on data
 def predict(model, device, loader, loss_function, logger, subset):
     model.eval()
-    loss_function = loss_function(reduction='sum')
     losses = []
     correct = 0
     with torch.no_grad():
