@@ -3,7 +3,10 @@ import os
 from datetime import datetime
 import yaml
 
-config = open('../config.yaml', 'r')
+try:
+    config = open('../config.yaml', 'r')
+except FileNotFoundError:
+    config = open('config.yaml', 'r')
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 LOGS_DIR = parsed_config['logs_dir']
 
@@ -49,6 +52,8 @@ class Logger:
             self.log_file.write('Augmentation: {}\n'.format(args.augmentation))
             self.log_file.write('Alpha Max: {}\n'.format(args.alpha_max))
             self.log_file.write('Beta: {}\n'.format(args.beta))
+        if type == 'teacher':
+            self.log_file.write('Big Model: {}\n'.format(args.big_model))
 
     def log(self, string):
         self.log_file.write(string + '\n')

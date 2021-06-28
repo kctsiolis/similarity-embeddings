@@ -44,6 +44,8 @@ def get_args(parser):
                         help='Parameter of similarity probability function p(alpha).')
     parser.add_argument('--small-student', action='store_true',
                         help='Use a small student model (vanilla CNN with 2 conv and pooling layers) for distillation.')
+    parser.add_argument('--big-model', action='store_true',
+                        help='Use ResNet-50 instead of ResNet-18.')
 
     args = parser.parse_args()
 
@@ -83,6 +85,8 @@ def make_script(args):
         command_start += '--device {} '.format(args.device)
         if args.cosine:
             command_start += '--cosine '
+        if args.big_model:
+            command_start += '--big-model '
 
         if args.dataset == 'cifar' and (args.type == 'distillation' or args.type == 'linear_classifier'):
             if args.small_student:

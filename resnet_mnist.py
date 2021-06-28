@@ -5,7 +5,7 @@
 import argparse
 import torch
 import numpy as np
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet50
 from torch import nn
 from mnist import mnist_train_loader
 from training import train_sup
@@ -15,6 +15,16 @@ class ResNet18MNIST(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = resnet18(num_classes=10)
+        #Set number of input channels to 1 (since MNIST images are greyscale)
+        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
+
+    def forward(self, x):
+        return self.model(x)
+
+class ResNet50MNIST(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = resnet50(num_classes=10)
         #Set number of input channels to 1 (since MNIST images are greyscale)
         self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
 
@@ -44,6 +54,9 @@ def get_args(parser):
                         help='how many batches to wait before logging training status')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
+    parser.add_argument('--big-model', action='store_true',
+                        help='Use ResNet-50 instead of ResNet-18.')
+
     args = parser.parse_args()
 
     return args
@@ -62,7 +75,10 @@ def main():
     logger = Logger('teacher', 'mnist', args)
 
     #Initialize the model
-    model = ResNet18MNIST()
+    if args.big_model:
+        model = ResNet50MNIST()
+    else:
+        model = ResNet18MNIST()
 
     #Get the data
     train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,

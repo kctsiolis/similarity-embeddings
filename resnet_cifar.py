@@ -2,7 +2,7 @@ import argparse
 import sys
 import torch
 import numpy as np
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet50
 from torch import nn
 from cifar import cifar_train_loader
 from training import train_sup
@@ -21,16 +21,18 @@ def get_args(parser):
                         help='learning rate (default: 1.0)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
                         help='Choice of optimizer for training.')
-    parser.add_argument('--patience', type=int,
+    parser.add_argument('--patience', type=int, default=5,
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--early-stop', type=int, default=5, metavar='E',
+    parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
+    parser.add_argument('--big-model', action='store_true',
+                        help='Use ResNet-50 instead of ResNet-18.')
     args = parser.parse_args()
 
     #Store the command
@@ -39,7 +41,7 @@ def get_args(parser):
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for CIFAR-10')
+    parser = argparse.ArgumentParser(description='ResNet for CIFAR-10')
     args = get_args(parser)
 
     #Set random seed
@@ -52,7 +54,10 @@ def main():
     logger = Logger('teacher', 'cifar', args)
 
     #Initialize the model
-    model = resnet18(num_classes=10)
+    if args.big_model:
+        model = resnet50(num_classes=10)
+    else:
+        model = resnet18(num_classes=10)
 
     #Get the data
     train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
