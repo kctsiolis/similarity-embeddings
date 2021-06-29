@@ -9,6 +9,17 @@ from torchvision.models import resnet18
 from torch import nn
 from logger import Logger
 
+class ResNet18NormalizedEmbedder(ResNet18Embedder):
+    def __init__(self, model):
+        super().__init__(model)
+        self.final_normalization = nn.BatchNorm1d(512, affine=False)
+    
+    def forward(self, x):
+        x = self.features(x)
+        x = torch.flatten(x, 1)
+        x = self.final_normalization(x) #Normalize the output
+        return x
+
 def get_args(parser):
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
@@ -42,7 +53,7 @@ def get_args(parser):
                         help='Temperature in sigmoid function converting similarity score to probability.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
                         help='Augmentation to use.')
-    parser.add_argument('--alpha-max', type=int, default=None,
+    parser.add_argument('--alpha-max', type=int, default=15,
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=0.2,
                         help='Parameter of similarity probability function p(alpha).')
@@ -65,7 +76,7 @@ def main():
     logger = Logger('similarity', 'cifar', args)
 
     if args.model == 'resnet18':
-        model = ResNet18Embedder(resnet18(num_classes=10))
+        model = ResNet18NormalizedEmbedder(resnet18(num_classes=10))
     else:
         raise ValueError('Invalid model choice.')
 
