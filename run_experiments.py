@@ -42,10 +42,8 @@ def get_args(parser):
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=[0.2], nargs='+',
                         help='Parameter of similarity probability function p(alpha).')
-    parser.add_argument('--small-student', action='store_true',
-                        help='Use a small student model (vanilla CNN with 2 conv and pooling layers) for distillation.')
-    parser.add_argument('--big-model', action='store_true',
-                        help='Use ResNet-50 instead of ResNet-18.')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18', 'resnet50']
+                        help='Model to use for the learner.')
 
     args = parser.parse_args()
 
@@ -83,10 +81,9 @@ def make_script(args):
         command_start += '--patience {} '.format(args.patience)
         command_start += '--early-stop {} '.format(args.early_stop)
         command_start += '--device {} '.format(args.device)
+        command_start += '--model {} '.format(args.model)
         if args.cosine:
             command_start += '--cosine '
-        if args.big_model:
-            command_start += '--big-model '
 
         if args.dataset == 'cifar' and (args.type == 'distillation' or args.type == 'linear_classifier'):
             if args.small_student:

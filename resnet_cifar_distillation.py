@@ -60,8 +60,8 @@ def get_args(parser):
                         help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--small-student', action='store_true',
-                        help='Use a small student model (vanilla CNN with 2 conv and pooling layers).')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50'],
+                        help='Choice of model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
 
@@ -82,7 +82,7 @@ def main():
 
     logger = Logger('distillation', 'cifar', args)
 
-    if args.small_student:
+    if args.model == 'cnn':
         student = ConvNetEmbedder()
     else:
         student = ResNet18Embedder(resnet18(num_classes=10))

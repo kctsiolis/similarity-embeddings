@@ -52,8 +52,7 @@ class Logger:
             self.log_file.write('Augmentation: {}\n'.format(args.augmentation))
             self.log_file.write('Alpha Max: {}\n'.format(args.alpha_max))
             self.log_file.write('Beta: {}\n'.format(args.beta))
-        if type == 'teacher':
-            self.log_file.write('Big Model: {}\n'.format(args.big_model))
+        self.log_file.write('Model: {}\n'.format(args.model))
 
     def log(self, string):
         self.log_file.write(string + '\n')
@@ -72,8 +71,8 @@ class Logger:
         return self.plots_dir
 
 def make_log_dir(type, dataset, args):
-    exp_name_start = '{}_{}_batch={}_lr={}_optim={},seed={}'.format(type, dataset,
-        args.train_batch_size, args.lr, args.optimizer, args.seed)
+    exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(type, dataset,
+        args.train_batch_size, args.lr, args.optimizer, args.seed, args.model)
     if type == 'similarity' or type == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
     if type == 'distillation':

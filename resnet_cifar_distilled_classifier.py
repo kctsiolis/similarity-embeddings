@@ -54,8 +54,8 @@ def get_args(parser):
                         help='Path to the distilled "student" model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--small-student', action='store_true',
-                        help='Use a small student model (vanilla CNN with 2 conv and pooling layers).')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18'],
+                        help='Choice of model for the student.')
     args = parser.parse_args()
 
     return args
@@ -76,11 +76,11 @@ def main():
     if args.load_path is None:
         return ValueError('Path to teacher network is required.')
 
-    if args.small_student:
+    if args.model == 'cnn':
         student = ConvNetEmbedder()
         student.load_state_dict(torch.load(args.load_path))
         model = ConvNetDistilledClassifier(student)
-    else:
+    else args.model == 'resnet18':
         student = ResNet18Embedder(resnet18(num_classes=10))
         student.load_state_dict(torch.load(args.load_path))        
         model = ResNet18DistilledClassifier(student)

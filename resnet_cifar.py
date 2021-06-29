@@ -29,10 +29,13 @@ def get_args(parser):
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--device', type=str, default="cpu",
+    parser.add_argument('--device', type=str, default='cpu',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--big-model', action='store_true',
-                        help='Use ResNet-50 instead of ResNet-18.')
+    parser.add_argument('--augs', type=str, default='all', choices=['normalize', 'flip', 'all'],
+                        help='Data augmentations to use on training set (normalize only, normalize' \
+                            'and flip, normalize, flip, and crop).')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50'],
+                        help='Choice of model.')
     args = parser.parse_args()
 
     #Store the command
@@ -54,14 +57,14 @@ def main():
     logger = Logger('teacher', 'cifar', args)
 
     #Initialize the model
-    if args.big_model:
-        model = resnet50(num_classes=10)
-    else:
+    if args.model == 'resnet18':
         model = resnet18(num_classes=10)
+    else:
+        model = resnet50(num_classes=10)
 
     #Get the data
     train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-        valid_batch_size=args.valid_batch_size, device=args.device)
+        valid_batch_size=args.valid_batch_size, device=args.device, augs=args.augs)
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,

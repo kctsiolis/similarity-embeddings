@@ -34,6 +34,8 @@ def get_args(parser):
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18'],
+                        help='Choice of model.')
     parser.add_argument('--loss', type=str, choices=['mse', 'kl'], default='mse',
                         help='Type of loss function to use.')
     parser.add_argument('--temp', type=float, default=1.0,
@@ -62,7 +64,10 @@ def main():
 
     logger = Logger('similarity', 'cifar', args)
 
-    model = ResNet18Embedder(resnet18(num_classes=10))
+    if args.model == 'resnet18':
+        model = ResNet18Embedder(resnet18(num_classes=10))
+    else:
+        raise ValueError('Invalid model choice.')
 
     train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
         valid_batch_size=args.valid_batch_size, device=args.device)

@@ -33,6 +33,8 @@ def get_args(parser):
                         help='how many batches to wait before logging training status')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18'],
+                        help='Choice of model.')
     args = parser.parse_args()
 
     return args

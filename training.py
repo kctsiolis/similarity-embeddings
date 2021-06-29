@@ -246,6 +246,11 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
 #Epoch of similarity training
 def train_similarity_epoch(model, device, train_loader, batch_size, loss_function, 
     optimizer, epoch, log_interval, logger, augmentation, alpha_max, beta, cosine, temp):
+
+    '''
+    DOCSTRING
+    '''
+
     model.train()
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
