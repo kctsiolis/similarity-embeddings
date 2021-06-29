@@ -205,7 +205,7 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
             lr = plateau_factor * lr
             logger.log("Learning rate decreasing to {}\n".format(lr))
 
-    train_report(train_losses, val_losses, chnage_epochs=change_epochs, logger=logger)
+    train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 
     return train_losses, val_losses
 
@@ -255,18 +255,25 @@ def train_similarity_epoch(model, device, train_loader, batch_size, loss_functio
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        augmented_data, sim_prob = augment(data, augmentation, alpha_max, beta, device=device)
-        output = get_model_similarity(model, data, augmented_data, cosine)
+        
+        #Get augmented data, target probabilities, and model probabilities
+        with torch.no_grad():
+            augmented_data, target = augment(data, augmentation, alpha_max, beta, device=device)
+        model_sims = get_model_similarity(model, data, augmented_data, cosine)
+
         if isinstance(loss_function, nn.KLDivLoss):
-            #KL Divergence expects output to be log probability distribution
-            eps = 1e-7
+            output = get_model_probability(model_sims, temp)
+            eps = 1e-7 #Constant to prevent log(0)
             output_comp = 1 - output
             output = torch.stack((output, output_comp), dim=1)
-            sim_prob_comp = 1 - sim_prob
-            sim_prob = torch.stack((sim_prob, sim_prob_comp), dim=1)
-            loss = loss_function((output+eps).log(), sim_prob.detach())
+            #KL Divergence expects output to be log probability distribution
+            output = (output + eps).log()
+            target_comp = 1 - target
+            target = torch.stack((target, target_comp), dim=1)
         else:
-            loss = loss_function(output, sim_prob.detach())
+            output = model_sims
+
+        loss = loss_function(output, target)
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -340,8 +347,8 @@ def get_student_teacher_similarity(student, teacher, data, cosine):
     return student_sims, teacher_sims
     
 
-#Get normalized similarities between original and augmented data, as predicted by the model 
-def get_model_similarity(model, data, augmented_data, cosine, temp=1):
+#Get similarities between original and augmented data, as predicted by the model 
+def get_model_similarity(model, data, augmented_data, cosine):
     #Get embeddings of original data
     data_embs = model(data)
     #Get embeddings of augmented data
@@ -349,13 +356,10 @@ def get_model_similarity(model, data, augmented_data, cosine, temp=1):
     if cosine: #Using cosine similarity
         data_embs = F.normalize(data_embs, p=2, dim=1)
         augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
-    model_sims = torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
-    if cosine:
-        output = model_sims
-    else: #Use tempered sigmoid to map scores to (0,1)
-        output = 1 / (1 + torch.exp(-temp * model_sims))
+    return torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
 
-    return output
+def get_model_probability(sims, temp=1):
+    return 1 / (1 + torch.exp(-temp * sims))
 
 #Compute loss over the entire set
 def compute_distillation_loss(student, teacher, device, loader, loss_function, 
@@ -383,18 +387,21 @@ def compute_similarity_loss(model, device, loader, loss_function, augmentation, 
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
-            augmented_data, sim_prob = augment(data, augmentation, alpha_max, device=device)
-            output = get_model_similarity(model, data, augmented_data, cosine, temp)
+            augmented_data, target = augment(data, augmentation, alpha_max, device=device)
+            model_sims = get_model_similarity(model, data, augmented_data, cosine)
             if isinstance(loss_function, nn.KLDivLoss):
                 #KL Divergence expects output to be log probability distribution
                 eps = 1e-7
+                output = get_model_probability(model_sims, temp)
                 output_comp = 1 - output
                 output = torch.stack((output, output_comp), dim=1)
-                sim_prob_comp = 1 - sim_prob
-                sim_prob = torch.stack((sim_prob, sim_prob_comp), dim=1)
-                losses.append(loss_function((output+eps).log(), sim_prob.detach()).item())
+                output = (output + eps).log()
+                target_comp = 1 - target
+                target = torch.stack((target, target_comp), dim=1)
             else:
-                losses.append(loss_function(output, sim_prob.detach()).item())
+                output = model_sims
+                
+            losses.append(loss_function(output, target).item())
 
     loss = np.mean(losses)
 
