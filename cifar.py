@@ -2,7 +2,6 @@
 
 import torch
 from torchvision import datasets, transforms
-from PIL import Image
 
 #From https://discuss.pytorch.org/t/apply-different-transform-data-augmentation-to-train-and-validation/63580
 class TransformedDataset(torch.utils.data.Dataset):

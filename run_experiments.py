@@ -42,7 +42,7 @@ def get_args(parser):
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=[0.2], nargs='+',
                         help='Parameter of similarity probability function p(alpha).')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18', 'resnet50']
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18', 'resnet50'],
                         help='Model to use for the learner.')
 
     args = parser.parse_args()
