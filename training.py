@@ -8,7 +8,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from matplotlib import pyplot as plt
 from data_augmentation import augment
 from logger import Logger
@@ -16,7 +16,8 @@ from logger import Logger
 #Supervised training loop
 def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=64, 
     valid_batch_size=1000, loss_function=nn.CrossEntropyLoss, epochs=20, lr=0.1,
-    optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, logger=None):
+    optimizer_choice='adam', scheduler_choice='plateau', patience=5, early_stop=5, 
+    log_interval=10, logger=None):
 
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -31,8 +32,13 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
     else:
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
-    scheduler = ReduceLROnPlateau(optimizer, patience=patience)
-    plateau_factor = 0.1
+    if scheduler_choice == 'plateau':
+        scheduler = ReduceLROnPlateau(optimizer, patience=patience)
+        plateau_factor = 0.1
+    elif scheduler_choice == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+    else:
+        raise ValueError('Only Plateau and Cosine schedulers are supported.')
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -70,10 +76,11 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
 
         scheduler.step(val_loss)
 
-        if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
-            change_epochs.append(epoch)
-            lr = plateau_factor * lr
-            logger.log("Learning rate decreasing to {}\n".format(lr))
+        if scheduler_choice == 'plateau':
+            if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
+                change_epochs.append(epoch)
+                lr = plateau_factor * lr
+                logger.log("Learning rate decreasing to {}\n".format(lr))
 
     train_report(train_losses, val_losses, train_accs, val_accs, change_epochs=change_epochs, logger=logger)
 
@@ -81,8 +88,8 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
 
 def train_distillation(student, teacher, train_loader, valid_loader, device='cpu', 
     train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
-    lr=0.1, optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, 
-    logger=None, cosine=False):
+    lr=0.1, optimizer_choice='adam', scheduler_choice='plateau', patience=5, 
+    early_stop=5, log_interval=10, logger=None, cosine=False):
 
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -98,8 +105,13 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
     else:
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
-    scheduler = ReduceLROnPlateau(optimizer, patience=patience)
-    plateau_factor = 0.1
+    if scheduler_choice == 'plateau':
+        scheduler = ReduceLROnPlateau(optimizer, patience=patience)
+        plateau_factor = 0.1
+    elif scheduler_choice == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+    else:
+        raise ValueError('Only Plateau and Cosine schedulers are supported.')
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -135,10 +147,11 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
         scheduler.step(val_loss)
 
-        if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
-            change_epochs.append(epoch)
-            lr = plateau_factor * lr
-            logger.log("Learning rate decreasing to {}\n".format(lr))
+        if scheduler_choice == 'plateau':
+            if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
+                change_epochs.append(epoch)
+                lr = plateau_factor * lr
+                logger.log("Learning rate decreasing to {}\n".format(lr))
 
     train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 
@@ -146,9 +159,9 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
 #Supervised training loop
 def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur-sigma',
-    alpha_max=15, beta=0.2, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=50, 
-    lr=0.1, optimizer_choice='adam', patience=5, early_stop=5, log_interval=10, logger=None, 
-    cosine=False, temp=1):
+    alpha_max=15, beta=0.2, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, 
+    epochs=50, lr=0.1, optimizer_choice='adam', scheduler_choice='plateau', patience=5, 
+    early_stop=5, log_interval=10, logger=None, cosine=False, temp=1):
     
     device = torch.device(device)
     print("Running on device {}".format(device))
@@ -163,8 +176,13 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
     else:
         raise ValueError('Only Adam and SGD optimizers are supported.')
 
-    scheduler = ReduceLROnPlateau(optimizer, patience=patience)
-    plateau_factor = 0.1
+    if scheduler_choice == 'plateau':
+        scheduler = ReduceLROnPlateau(optimizer, patience=patience)
+        plateau_factor = 0.1
+    elif scheduler_choice == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+    else:
+        raise ValueError('Only Plateau and Cosine schedulers are supported.')
 
     #Keep track of losses and accuracies
     train_losses = []
@@ -200,10 +218,11 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
         scheduler.step(val_loss)
 
-        if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
-            change_epochs.append(epoch)
-            lr = plateau_factor * lr
-            logger.log("Learning rate decreasing to {}\n".format(lr))
+        if scheduler_choice == 'plateau':
+            if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
+                change_epochs.append(epoch)
+                lr = plateau_factor * lr
+                logger.log("Learning rate decreasing to {}\n".format(lr))
 
     train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 

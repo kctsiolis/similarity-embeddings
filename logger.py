@@ -22,37 +22,38 @@ class Logger:
         os.mkdir(self.plots_dir)
         self.log_file = open(self.log_path, 'w')
         self.results_file = open(self.results_path, 'w')
-        self.make_header(type, args)
         self.verbose = verbose
+        self.make_header(type, args)
 
     def make_header(self, type, args):
-        self.log_file.write('Experiment Time: {}\n'.format(datetime.now()))
-        self.log_file.write('Type: {}\n'.format(type))
+        self.log('Experiment Time: {}\n'.format(datetime.now()))
+        self.log('Type: {}\n'.format(type))
         if type == 'teacher' or type == 'linear_classifier' or type == 'random':
-            self.log_file.write('Loss Function: Cross Entropy\n')
+            self.log('Loss Function: Cross Entropy')
         elif type == 'distillation':
-            self.log_file.write('Loss Function: MSE\n')
+            self.log('Loss Function: MSE')
         else:
-            self.log_file.write('Loss Function: {}\n'.format(args.loss))
-        self.log_file.write('Train Batch Size: {}\n'.format(args.train_batch_size))
-        self.log_file.write('Learning Rate : {}\n'.format(args.lr))
-        self.log_file.write('Optimizer: {}\n'.format(args.optimizer))
-        self.log_file.write('Seed: {}\n'.format(args.seed))
-        self.log_file.write('Max Epochs: {}\n'.format(args.epochs))
-        self.log_file.write('Scheduler Patience: {}\n'.format(args.patience))
-        self.log_file.write('Early Stopping Patience: {}\n'.format(args.early_stop))
-        self.log_file.write('Device: {}\n'.format(args.device))
-        self.log_file.write('Model: {}\n'.format(args.model))
+            self.log('Loss Function: {}'.format(args.loss))
+        self.log('Train Batch Size: {}'.format(args.train_batch_size))
+        self.log('Learning Rate : {}'.format(args.lr))
+        self.log('Optimizer: {}'.format(args.optimizer))
+        self.log('Scheduler: {}'.format(args.scheduler))
+        self.log('Seed: {}'.format(args.seed))
+        self.log('Max Epochs: {}'.format(args.epochs))
+        self.log('Scheduler Patience: {}'.format(args.patience))
+        self.log('Early Stopping Patience: {}'.format(args.early_stop))
+        self.log('Device: {}'.format(args.device))
+        self.log('Model: {}'.format(args.model))
         if type == 'distillation' or type == 'linear_classifier':
-           self.log_file.write('Load Path: {}\n'.format(args.load_path))
+           self.log('Load Path: {}'.format(args.load_path))
         if type == 'similarity' or type == 'distillation':
-            self.log_file.write('Cosine Similarity: {}\n'.format(args.cosine))
+            self.log('Cosine Similarity: {}'.format(args.cosine))
         if type == 'similarity':
             if args.loss == 'kl':
-                self.log_file.write('Temp: {}\n'.format(args.temp))
-            self.log_file.write('Augmentation: {}\n'.format(args.augmentation))
-            self.log_file.write('Alpha Max: {}\n'.format(args.alpha_max))
-            self.log_file.write('Beta: {}\n'.format(args.beta))
+                self.log('Temp: {}'.format(args.temp))
+            self.log('Augmentation: {}'.format(args.augmentation))
+            self.log('Alpha Max: {}'.format(args.alpha_max))
+            self.log('Beta: {}'.format(args.beta))
 
     def log(self, string):
         self.log_file.write(string + '\n')

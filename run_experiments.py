@@ -20,6 +20,8 @@ def get_args(parser):
                         help='learning rate (default: 1.0)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default=['adam'], nargs='+',
                         help='Choice of optimizer for training.')
+    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='plateau', nargs='+',
+                        help='Choice of scheduler for training.')
     parser.add_argument('--patience', type=int, default=5,
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=[42], nargs='+', metavar='S',
@@ -86,28 +88,31 @@ def make_script(args):
                 for optimizer in args.optimizer:
                     command_optim = command_lr + '--optimizer {} '.format(optimizer)
 
-                    for seed in args.seed:
-                        command_seed = command_optim + '--seed {} '.format(seed)
+                    for scheduler in args.scheduler:
+                        command_sched = command_optim + '--scheduler {} '.format(scheduler)
 
-                        if args.type == 'distillation' or args.type == 'linear_classifier':
-                            for load_path in args.load_path: 
-                                command_load = command_seed + '--load-path {} '.format(load_path)
-                                final_command = command_load + '\n'
-                                f.write(final_command)
-                        elif args.type == 'similarity':
-                            for loss in args.loss:
-                                command_loss = command_seed + '--loss {} '.format(loss)
-                                for temp in args.temp:
-                                    command_temp = command_loss + '--temp {} '.format(temp)
-                                    for alpha_max in args.alpha_max:
-                                        command_alpha = command_temp + '--alpha-max {} '.format(alpha_max)
-                                        for beta in args.beta:
-                                            command_beta = command_alpha + '--beta {} '.format(beta)
-                                            final_command = command_beta + '\n'
-                                            f.write(final_command)
-                        else:
-                            final_command = command_seed + '\n'
-                            f.write(final_command)       
+                        for seed in args.seed:
+                            command_seed = command_sched + '--seed {} '.format(seed)
+
+                            if args.type == 'distillation' or args.type == 'linear_classifier':
+                                for load_path in args.load_path: 
+                                    command_load = command_seed + '--load-path {} '.format(load_path)
+                                    final_command = command_load + '\n'
+                                    f.write(final_command)
+                            elif args.type == 'similarity':
+                                for loss in args.loss:
+                                    command_loss = command_seed + '--loss {} '.format(loss)
+                                    for temp in args.temp:
+                                        command_temp = command_loss + '--temp {} '.format(temp)
+                                        for alpha_max in args.alpha_max:
+                                            command_alpha = command_temp + '--alpha-max {} '.format(alpha_max)
+                                            for beta in args.beta:
+                                                command_beta = command_alpha + '--beta {} '.format(beta)
+                                                final_command = command_beta + '\n'
+                                                f.write(final_command)
+                            else:
+                                final_command = command_seed + '\n'
+                                f.write(final_command)       
 
         print('Created file {}'.format(script_path))
 

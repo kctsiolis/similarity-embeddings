@@ -24,6 +24,8 @@ def get_args(parser):
                         help='learning rate (default: 1.0)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
                         help='Choice of optimizer for training.')
+    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='plateau',
+                        help='Choice of scheduler for training.')
     parser.add_argument('--patience', type=int,
                         help='Patience used in the Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -81,8 +83,8 @@ def main():
     train_distillation(student, teacher, train_loader, valid_loader, device=args.device, 
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
         loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
-        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, logger=logger, 
-        cosine=args.cosine)
+        scheduler_choice=args.scheduler, patience=args.patience, early_stop=args.early_stop, 
+        log_interval=args.log_interval, logger=logger, cosine=args.cosine)
 
 if __name__ == '__main__':
     main()
