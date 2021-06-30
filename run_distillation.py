@@ -5,43 +5,19 @@ import argparse
 import torch
 import numpy as np
 import torch.nn as nn
-import torch.nn.functional as F
-from torchvision.models import resnet18
+from mnist import mnist_train_loader
 from cifar import cifar_train_loader
+from models import ResNet18, Embedder, ConvNetEmbedder
 from training import train_distillation
 from logger import Logger
 
-class ResNet18Embedder(nn.Module):
-    def __init__(self, model):
-        super().__init__()
-        self.features = nn.Sequential(*list(model.children())[:-1])
-
-    def forward(self, x):
-        x = self.features(x)
-        x = torch.flatten(x, 1)
-        return x
-
-class ConvNetEmbedder(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-
-    #Get the embedding
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
-        return x
-
 def get_args(parser):
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+        help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
     parser.add_argument('--valid-batch-size', type=int, default=1000, metavar='N',
         help='Input batch size for validation (default:1000)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
-        help='Input batch size for testing (default:1000)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
@@ -60,7 +36,7 @@ def get_args(parser):
                         help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50'],
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18'],
                         help='Choice of model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
@@ -70,7 +46,7 @@ def get_args(parser):
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='Distilling a ResNet-18 for CIFAR-10')
+    parser = argparse.ArgumentParser(description='Similarity-based Knowledge Distillation')
     args = get_args(parser)
 
     #Set random seed
@@ -80,25 +56,33 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('distillation', 'cifar', args)
-
-    if args.model == 'cnn':
-        student = ConvNetEmbedder()
+    #Get the data
+    if args.dataset == 'mnist':
+        one_channel = True
+        logger = Logger('distillation', 'mnist', args)
+        train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
     else:
-        student = ResNet18Embedder(resnet18(num_classes=10))
+        one_channel = False
+        logger = Logger('distillation', 'cifar', args)
+        train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
 
-    teacher = resnet18(num_classes=10)
-    teacher.load_state_dict(torch.load(args.load_path))
-    teacher = ResNet18Embedder(teacher)
+    teacher = ResNet18(one_channel=one_channel)
+    if args.model == 'resnet18':
+        student = Embedder(ResNet18(one_channel=one_channel))
+    else:
+        student = ConvNetEmbedder(one_channel=one_channel)
 
-    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-        valid_batch_size=args.valid_batch_size, device=args.device)
+    teacher.model.load_state_dict(torch.load(args.load_path), strict=False)
+    #We only care about the teacher's embeddings
+    teacher = Embedder(teacher)
 
     train_distillation(student, teacher, train_loader, valid_loader, device=args.device, 
-    train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-    loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
-    patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, logger=logger, 
-    cosine=args.cosine)
+        train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
+        loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
+        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, logger=logger, 
+        cosine=args.cosine)
 
 if __name__ == '__main__':
     main()

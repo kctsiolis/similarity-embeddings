@@ -42,17 +42,17 @@ class Logger:
         self.log_file.write('Scheduler Patience: {}\n'.format(args.patience))
         self.log_file.write('Early Stopping Patience: {}\n'.format(args.early_stop))
         self.log_file.write('Device: {}\n'.format(args.device))
+        self.log_file.write('Model: {}\n'.format(args.model))
         if type == 'distillation' or type == 'linear_classifier':
            self.log_file.write('Load Path: {}\n'.format(args.load_path))
         if type == 'similarity' or type == 'distillation':
             self.log_file.write('Cosine Similarity: {}\n'.format(args.cosine))
-        if type == 'distillation':
-            self.log_file.write('Small Student: {}\n'.format(args.small_student))
         if type == 'similarity':
+            if args.loss == 'kl':
+                self.log_file.write('Temp: {}\n'.format(args.temp))
             self.log_file.write('Augmentation: {}\n'.format(args.augmentation))
             self.log_file.write('Alpha Max: {}\n'.format(args.alpha_max))
             self.log_file.write('Beta: {}\n'.format(args.beta))
-        self.log_file.write('Model: {}\n'.format(args.model))
 
     def log(self, string):
         self.log_file.write(string + '\n')
@@ -75,14 +75,16 @@ def make_log_dir(type, dataset, args):
         args.train_batch_size, args.lr, args.optimizer, args.seed, args.model)
     if type == 'similarity' or type == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
-    if type == 'distillation':
-        exp_name_small_student = exp_name_cosine + '_smallstudent={}'.format(args.small_student)
     if type == 'similarity':
         exp_name_loss = exp_name_cosine + '_loss={}'.format(args.loss)
         exp_name_augmentation = exp_name_loss + '_augmentation={}'.format(args.augmentation)
         exp_name_alphamax = exp_name_augmentation + '_alphamax={}'.format(args.alpha_max)
         exp_name_beta = exp_name_alphamax + '_beta={}'.format(args.beta)
-        dir = os.path.join(LOGS_DIR, exp_name_beta)
+        if args.loss == 'kl':
+            exp_name_temp = exp_name_beta + '_temp={}'.format(args.temp)
+            dir = os.path.join(LOGS_DIR, exp_name_temp)
+        else:
+            dir = os.path.join(LOGS_DIR, exp_name_beta)
     elif type == 'distillation':
         dir = os.path.join(LOGS_DIR, exp_name_cosine)
     else:

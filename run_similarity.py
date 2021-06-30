@@ -1,32 +1,20 @@
 import argparse
-from resnet_mnist import ResNet18MNIST
-from resnet_cifar_distillation import ResNet18Embedder
-from cifar import cifar_train_loader
-from training import train_similarity
 import torch
 import numpy as np
-from torchvision.models import resnet18
 from torch import nn
+from mnist import mnist_train_loader
+from cifar import cifar_train_loader
+from training import train_similarity
+from models import ResNet18, Embedder, NormalizedEmbedder
 from logger import Logger
 
-class ResNet18NormalizedEmbedder(ResNet18Embedder):
-    def __init__(self, model):
-        super().__init__(model)
-        self.final_normalization = nn.BatchNorm1d(512, affine=False)
-    
-    def forward(self, x):
-        x = self.features(x)
-        x = torch.flatten(x, 1)
-        x = self.final_normalization(x) #Normalize the output
-        return x
-
 def get_args(parser):
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+        help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
     parser.add_argument('--valid-batch-size', type=int, default=1000, metavar='N',
         help='Input batch size for validation (default:1000)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
-        help='Input batch size for testing (default:1000)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
@@ -63,7 +51,7 @@ def get_args(parser):
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for MNIST')
+    parser = argparse.ArgumentParser(description='Similarity-based Embedding Learning')
     args = get_args(parser)
 
     #Set random seed
@@ -73,20 +61,24 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('similarity', 'cifar', args)
-
-    if args.model == 'resnet18':
-        model = ResNet18NormalizedEmbedder(resnet18(num_classes=10))
+    #Get the data and initialize the model
+    if args.dataset == 'mnist':
+        one_channel = True
+        logger = Logger('similarity', 'mnist', args)
+        train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
     else:
-        raise ValueError('Invalid model choice.')
-
-    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-        valid_batch_size=args.valid_batch_size, device=args.device)
+        one_channel = False
+        logger = Logger('similarity', 'cifar', args)
+        train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
 
     if args.loss == 'mse':
         loss_function = nn.MSELoss()
+        model = Embedder(ResNet18(one_channel=one_channel))
     else:
         loss_function = nn.KLDivLoss(reduction='batchmean')
+        model = NormalizedEmbedder(Embedder(ResNet18(one_channel=one_channel)))
 
     train_similarity(model, train_loader, valid_loader, device=args.device, augmentation=args.augmentation,
         alpha_max=args.alpha_max, train_batch_size=args.train_batch_size, 

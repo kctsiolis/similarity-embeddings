@@ -1,17 +1,17 @@
-#What happens if we learn a linear classifier on top of a randomly initialized ResNet18 for CIFAR?
+import torch
 import argparse
 import torch
 import numpy as np
 from torch import nn
-from resnet_mnist import ResNet18MNIST
-from resnet_cifar_distillation import ResNet18Embedder
-from resnet_mnist_distilled_classifier import ResNet18DistilledClassifier
-from torchvision.models import resnet18
+from models import Classifier, Embedder, ResNet18, ConvNetEmbedder
+from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from training import train_sup
 from logger import Logger
 
 def get_args(parser):
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+        help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
     parser.add_argument('--valid-batch-size', type=int, default=1000, metavar='N',
@@ -32,16 +32,18 @@ def get_args(parser):
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
+    parser.add_argument('--load-path', type=str,
+                        help='Path to the distilled "student" model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50'],
-                        help='Choice of model.')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18'],
+                        help='Choice of model for the student.')
     args = parser.parse_args()
 
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for MNIST')
+    parser = argparse.ArgumentParser(description='Linear Classification')
     args = get_args(parser)
 
     #Set random seed
@@ -51,20 +53,35 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('random', 'cifar', args)
-
-    #Randomly initialized ResNet18 with frozen embedder, learnable linear layer
-    model = ResNet18DistilledClassifier(ResNet18Embedder(resnet18(num_classes=10)))
-
+    if args.load_path is None:
+        return ValueError('Path to the embedder is required.')
+    
     #Get the data
-    train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-        valid_batch_size=args.valid_batch_size, device=args.device)
+    if args.dataset == 'mnist':
+        one_channel = True
+        logger = Logger('linear_classifier', 'mnist', args)
+        train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
+    else:
+        one_channel = False
+        logger = Logger('linear_classifier', 'cifar', args)
+        train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
+
+    if args.model == 'cnn':
+        embedder = ConvNetEmbedder(one_channel=one_channel)
+    else:
+        embedder = Embedder(ResNet18(one_channel=one_channel))
+
+    embedder.load_state_dict(torch.load(args.load_path), strict=False)
+    model = Classifier(embedder)
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,
         train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
-        loss_function=nn.CrossEntropyLoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
-        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, logger=logger)
+        loss_function=nn.CrossEntropyLoss(), epochs=args.epochs, lr=args.lr, 
+        optimizer_choice=args.optimizer, patience=args.patience, early_stop=args.early_stop, 
+        log_interval=args.log_interval, logger=logger)
 
 if __name__ == '__main__':
     main()
