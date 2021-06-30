@@ -1,15 +1,17 @@
+#What happens if we learn a linear classifier on top of a randomly initialized ResNet18 for CIFAR?
 import argparse
 import torch
 import numpy as np
-from resnet_mnist import ResNet18MNIST
-from resnet_mnist_distillation import ResNet18MNISTEmbedder
-from mnist import mnist_train_loader
-from training import train_similarity
-import torch
 from torch import nn
+from models import ResNet18, Embedder, Classifier
+from mnist import mnist_train_loader
+from cifar import cifar_train_loader
+from training import train_sup
 from logger import Logger
 
 def get_args(parser):
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+        help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
     parser.add_argument('--valid-batch-size', type=int, default=1000, metavar='N',
@@ -32,25 +34,14 @@ def get_args(parser):
                         help='how many batches to wait before logging training status')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--cosine', action='store_true',
-                        help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--loss', type=str, choices=['mse', 'kl'], default='mse',
-                        help='Type of loss function to use.')
-    parser.add_argument('--temp', type=float, default=1.0,
-                        help='Temperature in sigmoid function converting similarity score to probability.')
-    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
-                        help='Augmentation to use.')
-    parser.add_argument('--alpha-max', type=int, default=None,
-                        help='Largest possible augmentation strength.')
-    parser.add_argument('--beta', type=float, default=0.2,
-                        help='Parameter of similarity probability function p(alpha).')
-
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50'],
+                        help='Choice of model.')
     args = parser.parse_args()
 
     return args
 
 def main():
-    parser = argparse.ArgumentParser(description='ResNet-18 for MNIST')
+    parser = argparse.ArgumentParser(description='Linear Classification on Top of Random Embedder')
     args = get_args(parser)
 
     #Set random seed
@@ -60,23 +51,26 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.benchmark = True
 
-    logger = Logger('similarity', 'mnist', args)
-
-    model = ResNet18MNISTEmbedder(ResNet18MNIST())
-
-    train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
-        valid_batch_size=args.valid_batch_size, device=args.device)
-
-    if args.loss == 'mse':
-        loss_function = nn.MSELoss()
+    #Get the data
+    if args.dataset == 'mnist':
+        one_channel = True
+        logger = Logger('random', 'mnist', args)
+        train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
     else:
-        loss_function = nn.KLDivLoss(reduction='batchmean')
+        one_channel = False
+        logger = Logger('random', 'cifar', args)
+        train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
+            valid_batch_size=args.valid_batch_size, device=args.device)
 
-    train_similarity(model, train_loader, valid_loader, device=args.device, augmentation=args.augmentation,
-        alpha_max=args.alpha_max, train_batch_size=args.train_batch_size, 
-        valid_batch_size=args.valid_batch_size, loss_function=loss_function, epochs=args.epochs, 
-        lr=args.lr, optimizer_choice=args.optimizer, patience=args.patience, early_stop=args.early_stop, 
-        log_interval=args.log_interval, logger=logger, cosine=args.cosine, temp=args.temp)
+    #Randomly initialized ResNet18 with frozen embedder, learnable linear layer
+    model = Classifier(Embedder(ResNet18(one_channel=one_channel)))
+
+    #Train the model
+    train_sup(model, train_loader, valid_loader, device=args.device,
+        train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
+        loss_function=nn.CrossEntropyLoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
+        patience=args.patience, early_stop=args.early_stop, log_interval=args.log_interval, logger=logger)
 
 if __name__ == '__main__':
     main()

@@ -42,7 +42,7 @@ def get_args(parser):
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=[0.2], nargs='+',
                         help='Parameter of similarity probability function p(alpha).')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18', 'resnet50']
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18', 'resnet50'],
                         help='Model to use for the learner.')
 
     args = parser.parse_args()
@@ -54,29 +54,18 @@ def make_script(args):
     command_start = 'python {}/'.format(args.code_dir)
 
     with open(script_path, 'w') as f:
-        if args.dataset == 'mnist':
-            if args.type == 'teacher':
-                command_start += 'resnet_mnist.py '
-            elif args.type == 'distillation':
-                command_start += 'resnet_mnist_distillation.py '
-            elif args.type == 'similarity':
-                command_start += 'resnet_mnist_similarity.py '
-            elif args.type == 'linear_classifier':
-                command_start += 'resnet_mnist_distilled_classifier.py '
-            else:
-                command_start += 'resnet_mnist_random.py '
+        if args.type == 'teacher':
+            command_start += 'run_teacher.py '
+        elif args.type == 'distillation':
+            command_start += 'run_distillation.py '
+        elif args.type == 'similarity':
+            command_start += 'run_similarity.py '
+        elif args.type == 'linear_classifier':
+            command_start += 'run_linear_classifier.py '
         else:
-            if args.type == 'teacher':
-                command_start += 'resnet_cifar.py '
-            elif args.type == 'distillation':
-                command_start += 'resnet_cifar_distillation.py '
-            elif args.type == 'similarity':
-                command_start += 'resnet_cifar_similarity.py '
-            elif args.type == 'linear_classifier':
-                command_start += 'resnet_cifar_distilled_classifier.py '
-            else:
-                command_start += 'resnet_cifar_random.py '
+            command_start += 'run_random.py '
 
+        command_start += '--dataset {} '.format(args.dataset)
         command_start += '--epochs {} '.format(args.epochs)
         command_start += '--patience {} '.format(args.patience)
         command_start += '--early-stop {} '.format(args.early_stop)
@@ -84,10 +73,6 @@ def make_script(args):
         command_start += '--model {} '.format(args.model)
         if args.cosine:
             command_start += '--cosine '
-
-        if args.dataset == 'cifar' and (args.type == 'distillation' or args.type == 'linear_classifier'):
-            if args.small_student:
-                command_start += '--small-student '
 
         if args.type == 'similarity':
             command_start += '--augmentation {} '.format(args.augmentation)
