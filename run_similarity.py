@@ -80,7 +80,7 @@ def main():
         model = Embedder(ResNet18(one_channel=one_channel))
     else:
         loss_function = nn.KLDivLoss(reduction='batchmean')
-        model = NormalizedEmbedder(Embedder(ResNet18(one_channel=one_channel)))
+        model = NormalizedEmbedder(ResNet18(one_channel=one_channel))
 
     train_similarity(model, train_loader, valid_loader, device=args.device, 
         augmentation=args.augmentation, alpha_max=args.alpha_max, 
