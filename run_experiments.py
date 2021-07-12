@@ -1,8 +1,29 @@
+"""Create a bash script with commands to run experiments.
+
+This is useful for grid search. For hyperparameters such as learning rate
+and temperature, a list can be entered. For each combination of
+hyperparameters, a command is added to the bash script to train with this
+hyperparameter configuration.
+
+Experiment types supported:
+    Teacher
+    Distillation
+    Random
+    Similarity
+    Linear Classifier
+
+Datasets supported:
+    MNIST
+    CIFAR-10
+
+"""
+
 import argparse
 import os
 from datetime import datetime
 
 def get_args(parser):
+    """Collect command line arguments."""
     parser.add_argument('--scripts-dir', type=str, default='./jobs/',
         help='Directory to store bash script containing code to run experiments.')
     parser.add_argument('--code-dir', type=str, default='..',
@@ -36,7 +57,7 @@ def get_args(parser):
                         help='Use cosine similarity in the similarity and/or distillation loss (if applicable).')
     parser.add_argument('--loss', type=str, choices=['mse', 'kl'], default=['mse'], nargs='+',
                         help='Type of loss function to use for similarity experiments.')
-    parser.add_argument('--temp', type=float, default=[1.0], nargs='+',
+    parser.add_argument('--temp', type=float, default=[0.01], nargs='+',
                         help='Temperature in sigmoid function converting similarity score to probability.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
                         help='Augmentation to use (if applicable).')
@@ -52,6 +73,7 @@ def get_args(parser):
     return args
 
 def make_script(args):
+    """Construct bash script from command line arguments."""
     script_path = os.path.join(args.scripts_dir, 'sim_exps_{}.bash'.format(datetime.now()))
     command_start = 'python {}/'.format(args.code_dir)
 

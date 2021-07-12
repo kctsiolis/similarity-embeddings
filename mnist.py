@@ -1,11 +1,27 @@
-#Collection of functions to handle the MNIST dataset
-#Code based on PyTorch example code
-#https://github.com/pytorch/examples/blob/master/mnist/main.py
+"""Code for loading the MNIST dataset.
+
+Code based on PyTorch example code
+https://github.com/pytorch/examples/blob/master/mnist/main.py
+
+"""
 
 import torch
 from torchvision import datasets, transforms
 
-def mnist_train_loader(train_batch_size=64, valid_batch_size=1000, device='cpu'):
+def mnist_train_loader(train_batch_size: int = 64, 
+    valid_batch_size: int = 1000, device: str = 'cpu'
+    ) -> tuple([torch.utils.data.DataLoader, torch.utils.data.DataLoader]):
+    """Load the MNIST training set and split into training and validation.
+
+    Args:
+        train_batch_size: Training set batch size.
+        valid_batch_size: Validation set batch size.
+        device: String indicating which device to use.
+
+    Returns:
+        Training set and validation set loaders.
+
+    """
     train_kwargs = {'batch_size': train_batch_size}
     valid_kwargs = {'batch_size': valid_batch_size}
     if device != "cpu":

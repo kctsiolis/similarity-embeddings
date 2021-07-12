@@ -1,9 +1,32 @@
+"""Code for data augmentation on images.
+
+Augmentations supported:
+    Gaussian blur 
+
+"""
+
 from torchvision import transforms
 import torch
 import numpy as np
 
 #Gaussian blur with parameter sigma (which controls the blur intensity)
-def gaussian_blur_sigma(data, sigma_max, beta=0.2, device='cpu'):
+def gaussian_blur_sigma(data: torch.Tensor, sigma_max: int, 
+    beta: float, device = torch.device) -> tuple([torch.Tensor, torch.Tensor]):
+    """Apply gaussian blur with randomly sampled sigma parameter.
+
+    Sigma is sampled uniformly i.i.d. for each image in the data,
+    while the kernel size is fixed to be as large as possible.
+
+    Args:
+        data: Input data to be augmented.
+        sigma_max: Largest possible augmentation intensity.
+        beta: Similiarity probability parameter.
+        device: Device on which to store batch.
+
+    Returns:
+        The augmented data and the similarity probabilities.
+
+    """
     if sigma_max <= 0:
         raise ValueError("Maximum standard deviation must be positive.")
     sigma = (torch.rand(data.shape[0])*sigma_max).to(device)
@@ -17,7 +40,23 @@ def gaussian_blur_sigma(data, sigma_max, beta=0.2, device='cpu'):
 
     return data, sim_prob
 
-def gaussian_blur_kernel(data, sigma=8, beta=0.2, device='cpu'):
+def gaussian_blur_kernel(data: torch.Tensor, device: torch.device, 
+    sigma: int = 8, beta: float = 0.2) -> tuple([torch.Tensor, torch.Tensor]):
+    """Apply gaussian blur with randomly sampled kernel size parameter.
+
+    Kernel size is sampled uniformly i.i.d. (over valid values) for 
+    each image in the data, while the standard deviation is fixed.
+
+    Args:
+        data: The data to be augmented.
+        device: The device to store the data on for augmentation.
+        sigma: The standard deviation of the Gaussian blur.
+        beta: Parameter of the similarity probability.
+
+    Returns:
+        The augmented data and the similarity probabilities
+
+    """
     img_size = min(data.shape[2], data.shape[3])
     max_kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
     #Set the possible kernel sizes (must be odd numbers)
@@ -36,20 +75,30 @@ def gaussian_blur_kernel(data, sigma=8, beta=0.2, device='cpu'):
 
     return data, sim_prob
 
-#Main augmentation function
-#Input: 
-#   data: Tensor of image data (Batch size x channels x height x width)
-#   augmentation: Type of augmentation
-#   alpha_max: Largest possible augmentation strength
-#Output:
-#   augmented_data: The augmented batch
-#   sim_prob: Tensor of similarity probabilities (computed based on augmentation strength)
-def augment(data, augmentation, alpha_max=15, beta=0.2, device='cpu'):
+def augment(data: torch.Tensor, augmentation: str, device: torch.device, 
+    alpha_max: int = 15, beta: float = 0.2
+    ) -> tuple([torch.Tensor, torch.Tensor]):
+    """Perform data augmentation on input.
+
+    Args:
+        data: The input data to be augmented.
+        augmentation: The augmentation to perform.
+        device: The device to store data on during augmentation.
+        alpha_max: Largest possible augmentation intensity.
+        beta: Similarity probability parameter.
+
+    Returns:
+        The augmented data and the similarity probabilities.
+
+    Raises:
+        NotImplementedError: Only Gaussian blur is implemented.
+
+    """
     #Sample an augmentation strength for each instance in the batch
     augmented_data = data.detach().clone()
     if augmentation == 'blur-sigma':
-        return gaussian_blur_sigma(augmented_data, alpha_max, beta, device=device)
+        return gaussian_blur_sigma(augmented_data, alpha_max, beta, device)
     elif augmentation == 'blur-kernel':
-        return gaussian_blur_kernel(augmented_data, device=device)
+        return gaussian_blur_kernel(augmented_data, device)
     else:
         raise NotImplementedError

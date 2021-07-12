@@ -1,6 +1,15 @@
-#Inspired by the tracer from Hilbert-MLE: https://github.com/enewe101/hilbert/blob/master/hilbert/tracer.py
+"""Class and functions for logging training progress and results.
+
+Inspired by the tracer from Hilbert-MLE: https://github.com/enewe101/hilbert/blob/master/hilbert/tracer.py
+
+Attributes:
+    LOGS_DIR: Directory where logs are stored
+
+"""
+
 import os
 from datetime import datetime
+from argparse import Namespace
 import yaml
 
 try:
@@ -11,8 +20,31 @@ parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 LOGS_DIR = parsed_config['logs_dir']
 
 class Logger:
+    """Training status and results tracker.
 
-    def __init__(self, type, dataset, args, verbose=True):
+    Attributes:
+        dir (str): Path to directory where log is located.
+        log_path (str): Path to log.txt file in log directory.
+        results_path (str): Path to results.txt file in log directory.
+        model_path (str): Path to saved model in log directory.
+        plots_dir (str): Path to directory where plots are located.
+        log_file (TextIO): File object of the log file.
+        results_file (TextIO): File object of the results file.
+        verbose (bool): Whether or not to print log info to stdout. 
+
+    """
+
+    def __init__(self, type: str, dataset: str, args: Namespace, 
+        verbose: bool = True):
+        """Instantiate logger object.
+
+        Args:
+            type: Type of experiment (teacher, distillation, similarity, random, linear_classifier).
+            dataset: Dataset being used (MNIST or CIFAR).
+            args: Command line arguments used to run experiment.
+            verbose: Whether or not to print logger info to stdout.
+
+        """
         self.dir = make_log_dir(type, dataset, args)
         os.mkdir(self.dir)
         self.log_path = os.path.join(self.dir, 'log.txt')
@@ -25,9 +57,16 @@ class Logger:
         self.verbose = verbose
         self.make_header(type, args)
 
-    def make_header(self, type, args):
-        self.log('Experiment Time: {}\n'.format(datetime.now()))
-        self.log('Type: {}\n'.format(type))
+    def make_header(self, type: str, args: Namespace) -> None:
+        """Start the log with a header giving general experiment info.
+
+        Args:
+            type: Type of experiment being run.
+            args: Command line arguments used when running experiment.
+
+        """
+        self.log('Experiment Time: {}'.format(datetime.now()))
+        self.log('Type: {}'.format(type))
         if type == 'teacher' or type == 'linear_classifier' or type == 'random':
             self.log('Loss Function: Cross Entropy')
         elif type == 'distillation':
@@ -55,12 +94,24 @@ class Logger:
             self.log('Alpha Max: {}'.format(args.alpha_max))
             self.log('Beta: {}'.format(args.beta))
 
-    def log(self, string):
+    def log(self, string: str) -> None:
+        """Write a string to the log.
+
+        Args:
+            string: String to write.
+
+        """
         self.log_file.write(string + '\n')
         if self.verbose:
             print(string)
 
-    def log_results(self, string):
+    def log_results(self, string: str) -> None:
+        """Write results to the results file.
+        
+        Args:
+            string: String to write to results file.
+
+        """
         self.results_file.write(string + '\n')
         if self.verbose:
             print(string)
@@ -71,7 +122,16 @@ class Logger:
     def get_plots_dir(self):
         return self.plots_dir
 
-def make_log_dir(type, dataset, args):
+def make_log_dir(type: str, dataset: str, args: Namespace) -> None:
+    """Create directory to store log, results file, model, and plots.
+
+    Args:
+        type: Type of experiment.
+        dataset: Dataset used for experiments.
+        args: Command line arguments used to run experiment.
+
+    """
+
     exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(type, dataset,
         args.train_batch_size, args.lr, args.optimizer, args.seed, args.model)
     if type == 'similarity' or type == 'distillation':

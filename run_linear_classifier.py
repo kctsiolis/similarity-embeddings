@@ -1,3 +1,18 @@
+"""Load a pre-trained embedder and train a linear classifier on top.
+
+The pre-trained embedder must be stored locally. Specify the path
+with the "load-path" argument.
+
+Embedders supported:
+    Basic CNN
+    ResNet18
+
+Datasets supported:
+    MNIST
+    CIFAR-10
+    
+"""
+
 import torch
 import argparse
 import torch
@@ -10,6 +25,7 @@ from training import train_sup
 from logger import Logger
 
 def get_args(parser):
+    """Collect command line arguments."""
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
@@ -45,6 +61,7 @@ def get_args(parser):
     return args
 
 def main():
+    """Load arguments, the dataset, and initiate the training loop."""
     parser = argparse.ArgumentParser(description='Linear Classification')
     args = get_args(parser)
 
@@ -80,7 +97,6 @@ def main():
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,
-        train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
         loss_function=nn.CrossEntropyLoss(), epochs=args.epochs, lr=args.lr, 
         optimizer_choice=args.optimizer, scheduler_choice=args.scheduler, 
         patience=args.patience, early_stop=args.early_stop, 

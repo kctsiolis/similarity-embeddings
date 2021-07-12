@@ -1,6 +1,14 @@
-#Useful functions for training neural nets
-#Based on code from PyTorch example
-#https://github.com/pytorch/examples/blob/master/mnist/main.py
+"""Code for training loops and loss computation.
+
+Supports supervised training, similarity-based embedding training,
+and similarity-based distillation training.
+
+Includes code for training summary and plots.
+
+Based on code from PyTorch example
+https://github.com/pytorch/examples/blob/master/mnist/main.py
+
+"""
 
 import torch
 import numpy as np
@@ -13,12 +21,41 @@ from matplotlib import pyplot as plt
 from data_augmentation import augment
 from logger import Logger
 
-#Supervised training loop
-def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=64, 
-    valid_batch_size=1000, loss_function=nn.CrossEntropyLoss, epochs=20, lr=0.1,
-    optimizer_choice='adam', scheduler_choice='plateau', patience=5, early_stop=5, 
-    log_interval=10, logger=None):
+def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
+    valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
+    loss_function: nn.Module = nn.CrossEntropyLoss, epochs: int = 200, 
+    lr: float = 0.1, optimizer_choice: str = 'adam', 
+    scheduler_choice: str = 'plateau', patience: int = 5, 
+    early_stop: int = 10, log_interval: int = 10, 
+    logger: Logger = None) -> tuple([list([float]), list([float]), list([float]), 
+    list([float])]):
+    """Supervised training loop.
 
+    Args:
+        model: The model to be trained.
+        train_loader: The training set.
+        valid_loader: The validation set.
+        device: Device to train on. Recommended to use CUDA if it is available.
+        loss_function: Loss function to use.
+        epochs: Maximum number of epochs.
+        lr: Starting learning rate.
+        optimizer_choice: Choice of optimizer (Adam or Momentum SGD).
+        scheduler_choice: Choice of scheduler (Plateau or Cosine Annealing).
+        patience: Scheduler patience (applies only to Plateau scheduler).
+        early_stop: Early stopping patience.
+        log_interval: Number of batches between logs.
+        logger: Logger object which tracks live training information.
+
+    Returns:
+        List of training losses, list of training accuracies, list of 
+        validation losses, list of validation accuracies (one entry
+        per epoch).
+
+    Raises:
+        ValueError: Only Adam and SGD optimizers are supported.
+        ValueError: Only Plateau and Cosine schedulers are supported.
+    
+    """
     device = torch.device(device)
     print("Running on device {}".format(device))
     model = model.to(device)
@@ -86,11 +123,43 @@ def train_sup(model, train_loader, valid_loader, device='cpu', train_batch_size=
 
     return train_losses, train_accs, val_losses, val_accs
 
-def train_distillation(student, teacher, train_loader, valid_loader, device='cpu', 
-    train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, epochs=20, 
-    lr=0.1, optimizer_choice='adam', scheduler_choice='plateau', patience=5, 
-    early_stop=5, log_interval=10, logger=None, cosine=False):
+def train_distillation(student: nn.Module, teacher: nn.Module, 
+    train_loader: torch.utils.data.DataLoader, 
+    valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
+    loss_function: nn.Module = nn.MSELoss, epochs: int = 200, 
+    lr: float = 0.1, optimizer_choice: str = 'adam', 
+    scheduler_choice: str = 'plateau', patience: int = 5, 
+    early_stop: int = 10, log_interval: int = 10, 
+    logger: Logger = None, cosine: bool = False
+    ) -> tuple([list([float]), list([float])]):
+    """Distillation training loop.
 
+    Args:
+        student: Student model to be trained.
+        teacher: Teacher model to emulate.
+        train_loader: The training set.
+        valid_loader: The validation set.
+        device: Device to train on. Recommended to use CUDA if it is available.
+        loss_function: Loss function to minimize.
+        epochs: Maximum number of epochs.
+        lr: Starting learning rate.
+        optimizer_choice: Choice of optimizer (Adam or Momentum SGD).
+        scheduler_choice: Choice of scheduler (Plateau or Cosine Annealing).
+        patience: Scheduler patience (applies only to Plateau scheduler).
+        early_stop: Early stopping patience.
+        log_interval: Number of batches between logs.
+        logger: Logger object which tracks live training information.
+        cosine: Set to true to match cosine similarities, otherwise match dot products.
+
+    Returns:
+        List of training losses, list of validation losses (one entry
+        per epoch).
+
+    Raises:
+        ValueError: Only Adam and SGD optimizers are supported.
+        ValueError: Only Plateau and Cosine schedulers are supported.
+    
+    """
     device = torch.device(device)
     print("Running on device {}".format(device))
     student = student.to(device)
@@ -157,12 +226,47 @@ def train_distillation(student, teacher, train_loader, valid_loader, device='cpu
 
     return train_losses, val_losses
 
-#Supervised training loop
-def train_similarity(model, train_loader, valid_loader, device='cpu', augmentation='blur-sigma',
-    alpha_max=15, beta=0.2, train_batch_size=64, valid_batch_size=1000, loss_function=nn.MSELoss, 
-    epochs=50, lr=0.1, optimizer_choice='adam', scheduler_choice='plateau', patience=5, 
-    early_stop=5, log_interval=10, logger=None, cosine=False, temp=1):
+def train_similarity(model: nn.Module, 
+    train_loader: torch.utils.data.DataLoader, 
+    valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
+    augmentation: str = 'blur-sigma', alpha_max: int = 15, 
+    beta: float = 0.2, loss_function: nn.Module = nn.MSELoss, 
+    epochs: int = 200, lr: float = 0.1, optimizer_choice: str = 'adam', 
+    scheduler_choice: str = 'plateau', patience: int = 5, 
+    early_stop: int = 10, log_interval: int = 10, logger: Logger = None, 
+    cosine: bool = False, temp: float = 0.01
+    ) -> tuple([list([float]), list([float])]):
+    """Similarity-based embedding training loop.
+
+    Args:
+        model: Model to be trained.
+        train_loader: The training set.
+        valid_loader: The validation set.
+        device: Device to train on. Recommended to use CUDA if it is available.
+        augmentation: Type of data augmentation to use.
+        alpha_max: Maximum intensity of data augmentation.
+        beta: Parameter of similarity probability function.
+        loss_function: Loss function to minimize (MSE or KL divergence).
+        epochs: Maximum number of epochs.
+        lr: Starting learning rate.
+        optimizer_choice: Choice of optimizer (Adam or Momentum SGD).
+        scheduler_choice: Choice of scheduler (Plateau or Cosine Annealing).
+        patience: Scheduler patience (applies only to Plateau scheduler).
+        early_stop: Early stopping patience.
+        log_interval: Number of batches between logs.
+        logger: Logger object which tracks live training information.
+        cosine: Set to true to match cosine similarities, otherwise match dot products.
+        temp: Temperature hyperparameter in sigmoid.
+
+    Returns:
+        List of training losses, list of validation losses (one entry
+        per epoch).
+
+    Raises:
+        ValueError: Only Adam and SGD optimizers are supported.
+        ValueError: Only Plateau and Cosine schedulers are supported.
     
+    """
     device = torch.device(device)
     print("Running on device {}".format(device))
     model = model.to(device)
@@ -192,12 +296,12 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
     change_epochs = []
 
     for epoch in range(1, epochs + 1):
-        train_similarity_epoch(model, device, train_loader, train_batch_size, loss_function, 
+        train_similarity_epoch(model, device, train_loader, loss_function, 
             optimizer, epoch, log_interval, logger, augmentation, alpha_max, beta, cosine, temp)
         train_loss = compute_similarity_loss(model, device, train_loader, loss_function, 
-            augmentation, alpha_max, cosine, temp, logger, "Train")
+            augmentation, alpha_max, beta, cosine, temp, logger, "Train")
         val_loss = compute_similarity_loss(model, device, valid_loader, loss_function, 
-            augmentation, alpha_max, cosine, temp, logger, "Validation")
+            augmentation, alpha_max, beta, cosine, temp, logger, "Validation")
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -228,8 +332,23 @@ def train_similarity(model, train_loader, valid_loader, device='cpu', augmentati
 
     return train_losses, val_losses
 
-#Epoch of supervised training
-def train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval, logger):
+def train_sup_epoch(model: nn.Module, device: torch.device, 
+    train_loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
+    optimizer: optim.Optimizer, epoch: int, log_interval: int, 
+    logger: Logger) -> None:
+    """Train in supervised fashion for one epoch.
+
+    Args:
+        model: Model being trained.
+        train_loader: The training set.
+        device: Device to train on. Recommended to use CUDA if it is available.
+        loss_function: Loss function to minimize.
+        optimizer: Optimizer being used.
+        epoch: The current epoch number.
+        log_interval: Number of batches between logs.
+        logger: Logger object which tracks live training information.
+    
+    """
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
@@ -244,9 +363,25 @@ def train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
 
-#Epoch of disatillation training (similarity-preserving)
-def train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
-    optimizer, epoch, log_interval, logger, cosine):
+def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
+    device: torch.device, train_loader: torch.utils.data.DataLoader, 
+    loss_function: nn.Module, optimizer: optim.Optimizer, epoch: int, 
+    log_interval: int, logger: Logger, cosine: bool) -> None:
+    """Train the student for one epoch.
+
+    Args:
+        student: Student model to be trained.
+        teacher: Teacher model to emulate.
+        device: Device to train on. 
+        train_loader: The training set.
+        loss_function: Loss function to minimize.
+        optimizer: Optimizer being used.
+        epoch: The current epoch number.
+        log_interval: Number of batches between logs.
+        logger: Logger object which tracks live training information.
+        cosine: Set to true to match cosine similarities, otherwise match dot products.
+
+    """
     student.train()
     teacher.eval()
     for batch_idx, (data, _) in enumerate(train_loader):
@@ -263,13 +398,29 @@ def train_distillation_epoch(student, teacher, device, train_loader, loss_functi
             logger.log(log_str)
 
 #Epoch of similarity training
-def train_similarity_epoch(model, device, train_loader, batch_size, loss_function, 
-    optimizer, epoch, log_interval, logger, augmentation, alpha_max, beta, cosine, temp):
+def train_similarity_epoch(model: nn.Module, device: torch.device, 
+    train_loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
+    optimizer: optim.Optimizer, epoch: int, log_interval: int, 
+    logger: Logger, augmentation: str, alpha_max: int, beta: float, 
+    cosine: bool, temp: float) -> None:
+    """Train similarity-based embeddings for one epoch.
 
-    '''
-    DOCSTRING
-    '''
+    Args:
+        model: Model to be trained.
+        device: Device to train on. 
+        train_loader: The training set.
+        loss_function: Loss function to minimize.
+        optimizer: Optimizer being used.
+        epoch: The current epoch number.
+        log_interval: Number of batches between logs.
+        logger: Logger object which tracks live training information.
+        augmentation: Type of data augmentation being used.
+        alpha_max: Largest possible augmentation intensity.
+        beta: Parameter of similarity probability.
+        cosine: Set to true to match cosine similarities, otherwise match dot products.
+        temp: Temperature hyperparameter for sigmoid.
 
+    """
     model.train()
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
@@ -277,7 +428,7 @@ def train_similarity_epoch(model, device, train_loader, batch_size, loss_functio
         
         #Get augmented data, target probabilities, and model probabilities
         with torch.no_grad():
-            augmented_data, target = augment(data, augmentation, alpha_max, beta, device=device)
+            augmented_data, target = augment(data, augmentation, device, alpha_max, beta)
         model_sims = get_model_similarity(model, data, augmented_data, cosine)
 
         if isinstance(loss_function, nn.KLDivLoss):
@@ -301,8 +452,22 @@ def train_similarity_epoch(model, device, train_loader, batch_size, loss_functio
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
 
-#Evaluation on data
-def predict(model, device, loader, loss_function, logger, subset):
+def predict(model: nn.Module, device: torch.device, 
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
+    logger: Logger, subset: str) -> tuple([float, float]):
+    """Evaluate supervised model on data.
+
+    Args:
+        model: Model to be evaluated.
+        device: Device to evaluate on.
+        loader: Data to evaluate on.
+        loss_function: Loss function being used.
+        logger: Logger object which tracks model performance.
+
+    Returns:
+        Model loss and accuracy on the evaluation dataset.
+    
+    """
     model.eval()
     losses = []
     correct = 0
@@ -324,9 +489,21 @@ def predict(model, device, loader, loss_function, logger, subset):
 
     return loss, acc
 
-#Takes an "Embedder" model as input
-#Return embeddings in numpy format
-def get_embeddings(model, device, loader, emb_dim):
+def get_embeddings(model: nn.Module, device: torch.device, 
+    loader: torch.utils.data.DataLoader, emb_dim: int
+    ) -> tuple([np.ndarray, np.ndarray]):
+    """Get model's embeddings on data in numpy format.
+    
+    Args:
+        model: The model computing the embeddings.
+        device: The device on which the model and data are stored.
+        loader: The input.
+        emb_dim: The embedding dimension.
+
+    Returns:
+        The embeddings and labels for all instances in the data.
+    
+    """
     model.to(device)
     model.eval()
 
@@ -342,16 +519,37 @@ def get_embeddings(model, device, loader, emb_dim):
 
     return embeddings, labels
 
-#Extract the labels as a numpy array
-def get_labels(loader):
+def get_labels(loader: torch.utils.data.DataLoader) -> np.ndarray:
+    """Extract only the labels as a numpy array.
+
+    Args:
+        loader: The labelled data.
+
+    Returns:
+        The labels for the data.
+
+    """
     labels = np.zeros((0))
     for _, target in loader:
         labels = np.concatenate((labels, target))
 
     return labels
 
-#Get similarities between instances, as given by student and teacher
-def get_student_teacher_similarity(student, teacher, data, cosine):
+def get_student_teacher_similarity(student: nn.Module, 
+    teacher: nn.Module, data: torch.Tensor, cosine: bool,
+    ) -> tuple([torch.Tensor, torch.Tensor]):
+    """Get similarities between instances, as given by student and teacher
+
+    Args:
+        student: The student model.
+        teacher: The teacher model.
+        data: The input.
+        cosine: Set to true to compute cosine similarity, otherwise dot product.
+
+    Returns:
+        The similarities output by the student and the teacher.
+
+    """
     student_embs = student(data)
     if cosine:
         student_embs = F.normalize(student_embs, p=2, dim=1)
@@ -365,24 +563,65 @@ def get_student_teacher_similarity(student, teacher, data, cosine):
 
     return student_sims, teacher_sims
     
+def get_model_similarity(model: nn.Module, data: torch.Tensor, 
+    augmented_data: torch.Tensor, cosine: bool) -> torch.Tensor:
+    """Get similarities between original and augmented data, as predicted by the model. 
 
-#Get similarities between original and augmented data, as predicted by the model 
-def get_model_similarity(model, data, augmented_data, cosine):
+    Args:
+        model: The model.
+        data: The input.
+        augmented_data: The augmented input.
+        cosine: Set to true to compute cosine similarity, otherwise dot product.
+
+    Returns:
+        The similarities output by the model.
+
+    """
     #Get embeddings of original data
     data_embs = model(data)
     #Get embeddings of augmented data
     augmented_data_embs = model(augmented_data)
+
     if cosine: #Using cosine similarity
         data_embs = F.normalize(data_embs, p=2, dim=1)
         augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
+
     return torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
 
-def get_model_probability(sims, temp=1):
+def get_model_probability(sims: torch.Tensor, temp: float = 1.0
+    ) -> torch.Tensor:
+    """Get model's probability of similarity via sigmoid.
+
+    Args:
+        sims: Model similarities.
+        temp: Temperature hyperparameter for sigmoid.
+
+    Returns:
+        Model's probability of similarity.
+
+    """
     return 1 / (1 + torch.exp(-temp * sims))
 
-#Compute loss over the entire set
-def compute_distillation_loss(student, teacher, device, loader, loss_function, 
-    cosine, logger, subset):
+def compute_distillation_loss(student: nn.Module, teacher: nn.Module,
+    device: torch.device, loader: torch.utils.data.DataLoader, 
+    loss_function: nn.Module, cosine: bool, logger: Logger, subset: str
+    ) -> float:
+    """Compute the distillation loss.
+
+    Args:
+        student: The student model.
+        teacher: The teacher model.
+        device: The device that the models and data are stored on.
+        loader: The data the loss is computed on.
+        loss_function: The loss function.
+        cosine: Whether or not cosine similarity is being used.
+        logger: Logs the loss.
+        subset: Indicates which set the data belongs to (training or validation).
+
+    Returns:
+        The distillation loss.
+
+    """
     student.eval()
     teacher.eval()
     losses = []
@@ -399,14 +638,35 @@ def compute_distillation_loss(student, teacher, device, loader, loss_function,
 
     return loss
 
-def compute_similarity_loss(model, device, loader, loss_function, augmentation, alpha_max, 
-    cosine, temp, logger, subset):
+def compute_similarity_loss(model: nn.Module, device: torch.device, 
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
+    augmentation: str, alpha_max: int, beta: float, cosine: bool, 
+    temp: float, logger: Logger, subset: str) -> float:
+    """Compute the similarity-based embedding loss.
+
+    Args:
+        model: The model being evaluated.
+        device: The device that the model and data are stored on.
+        loader: The data.
+        loss_function: The loss function.
+        Augmentation: Type of data augmentation being used.
+        alpha_max: Maximum intensity of data augmentation.
+        beta: Parameter of similarity probability
+        cosine: Whether or not cosine similarity is being used.
+        temp: Temperature hyperparameter for sigmoid.
+        logger: Logs the loss.
+        subset: Indicates which set the data belongs to (training or validation).
+
+    Returns:
+        The similarity loss.
+
+    """
     model.eval()
     losses = []
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
-            augmented_data, target = augment(data, augmentation, alpha_max, device=device)
+            augmented_data, target = augment(data, augmentation, device, alpha_max, beta)
             model_sims = get_model_similarity(model, data, augmented_data, cosine)
             if isinstance(loss_function, nn.KLDivLoss):
                 #KL Divergence expects output to be log probability distribution
@@ -429,7 +689,20 @@ def compute_similarity_loss(model, device, loader, loss_function, augmentation, 
 
     return loss
             
-def train_report(train_losses, val_losses, train_accs=None, val_accs=None, change_epochs=None, logger=None):
+def train_report(train_losses: list([float]), val_losses: list([float]), 
+    train_accs: list([float]) = None, val_accs: list([float]) = None, 
+    change_epochs: list([int]) = None, logger: Logger = None) -> None:
+    """Produce a summary of training.
+
+    Args:
+        train_losses: Training set loss after each epoch.
+        val_losses: Validation set loss after each epoch.
+        train_accs: Training accuracies after each epoch.
+        val_accs: Validation accuracies after each epoch.
+        change_epochs: List of epochs where learning rate changes.
+        logger: The results logger.
+
+    """
     best_epoch = np.argmin(val_losses)
     logger.log("Training complete.\n")
     logger.log_results("Best Epoch: {}".format(best_epoch + 1))
@@ -447,8 +720,18 @@ def train_report(train_losses, val_losses, train_accs=None, val_accs=None, chang
         if train_accs is not None and val_accs is not None:
             train_plots(train_accs, val_accs, "Accuracy", save_dir, change_epochs)
 
-#Helper function for plots of accuracy vs. epochs and loss vs. epochs
-def train_plots(train_vals, val_vals, y_label, save_dir, change_epochs):
+def train_plots(train_vals: list([float]), val_vals: list([float]), 
+    y_label: str, save_dir: str, change_epochs: list([int])) -> None:
+    """Plotting loss or accuracy as a function of epoch number.
+
+    Args:
+        train_vals: y-axis training values (loss or accuracy).
+        val_vals: y-axis validation values (loss or accuracy).
+        y_label: y-axis label (loss or accuracy).
+        save_dir: Directory where plots will be saved.
+        change_epochs: Epochs where learning rate changes.
+
+    """
     epochs = np.arange(1,len(train_vals)+1)
     plt.figure()
     plt.plot(epochs, train_vals, 'b-')

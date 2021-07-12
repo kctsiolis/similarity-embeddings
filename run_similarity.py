@@ -1,3 +1,22 @@
+"""Train similarity-based embeddings from data augmentation.
+
+The embeddings are trained so that the dot product between an image's 
+embedding and the embedding of its augmented version reflect a pre-defined
+notion of similarity. 
+
+Models supported:
+    ResNet18 (imported from PyTorch)
+
+Datasets supported:
+    MNIST
+    CIFAR-10
+
+Loss functions supported:
+    MSE
+    KL Divergence
+
+"""
+
 import argparse
 import torch
 import numpy as np
@@ -9,6 +28,7 @@ from models import ResNet18, Embedder, NormalizedEmbedder
 from logger import Logger
 
 def get_args(parser):
+    """Collect command line arguments."""
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
@@ -39,7 +59,7 @@ def get_args(parser):
                         help='Choice of model.')
     parser.add_argument('--loss', type=str, choices=['mse', 'kl'], default='mse',
                         help='Type of loss function to use.')
-    parser.add_argument('--temp', type=float, default=1.0,
+    parser.add_argument('--temp', type=float, default=0.01,
                         help='Temperature in sigmoid function converting similarity score to probability.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
                         help='Augmentation to use.')
@@ -53,6 +73,7 @@ def get_args(parser):
     return args
 
 def main():
+    """Load arguments, the dataset, and initiate the training loop."""
     parser = argparse.ArgumentParser(description='Similarity-based Embedding Learning')
     args = get_args(parser)
 
@@ -84,7 +105,6 @@ def main():
 
     train_similarity(model, train_loader, valid_loader, device=args.device, 
         augmentation=args.augmentation, alpha_max=args.alpha_max, 
-        train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
         loss_function=loss_function, epochs=args.epochs, lr=args.lr, 
         optimizer_choice=args.optimizer, scheduler_choice=args.scheduler, patience=args.patience, 
         early_stop=args.early_stop, log_interval=args.log_interval, logger=logger, 

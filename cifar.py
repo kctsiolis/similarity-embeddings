@@ -1,23 +1,58 @@
-#Based on https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
+"""Code for loading the CIFAR-10 dataset.
+
+Based on https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
+
+"""
 
 import torch
 from torchvision import datasets, transforms
 
-#From https://discuss.pytorch.org/t/apply-different-transform-data-augmentation-to-train-and-validation/63580
 class TransformedDataset(torch.utils.data.Dataset):
+    """Wrapper class for augmented dataset.
+    
+    From https://discuss.pytorch.org/t/apply-different-transform-data-augmentation-to-train-and-validation/63580.
 
-    def __init__(self, dataset, transform):
+    Args:
+        dataset (torch.utils.data.Dataset): Original dataset.
+        transform (transforms.Compose): Data augmentation to apply.
+    
+    """
+
+    def __init__(self, dataset: torch.utils.data.Dataset, 
+        transform: transforms.Compose):
+        """Instantiate object.
+        
+        Args:
+            dataset: Original dataset.
+            transform: Data augmentation to apply.
+
+        """
         self.dataset = dataset
         self.transform = transform
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int):
+        """Get augmented image."""
         return self.transform(self.dataset[index][0]), self.dataset[index][1]
 
     def __len__(self):
         return len(self.dataset)
 
 
-def cifar_train_loader(train_batch_size=64, valid_batch_size=1000, device='cpu', augs='normalize'):
+def cifar_train_loader(train_batch_size: int = 64, valid_batch_size: int = 1000, 
+    device: str = 'cpu', augs: str = 'normalize'
+    ) -> tuple([torch.utils.data.DataLoader, torch.utils.data.DataLoader]):
+    """Load the CIFAR-10 training set and split into training and validation.
+    
+    Args:
+        train_batch_size: Training set batch size.
+        valid_batch_size: Validation set batch size.
+        device: String indicating which device to use.
+        augs: Data augmentations to use.
+
+    Returns:
+        Training and validation set loaders.
+
+    """
     train_kwargs = {'batch_size': train_batch_size}
     valid_kwargs = {'batch_size': valid_batch_size}
     if device != "cpu":

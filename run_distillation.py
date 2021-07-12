@@ -1,5 +1,20 @@
-#Some code taken from Torch tutorial on classification for CIFAR-10
-#https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+"""Train a student to emulate the similarities between the teacher's embeddings.
+
+Some code taken from Torch tutorial on classification for CIFAR-10
+https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+Teachers supported:
+    ResNet18
+
+Students supported:
+    ResNet18
+    Basic CNN
+
+Datasets supported:
+    MNIST
+    CIFAR-10
+
+"""
 
 import argparse
 import torch
@@ -12,6 +27,7 @@ from training import train_distillation
 from logger import Logger
 
 def get_args(parser):
+    """Collect command line arguments."""
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
@@ -48,6 +64,7 @@ def get_args(parser):
     return args
 
 def main():
+    """Load arguments, the dataset, and initiate the training loop."""
     parser = argparse.ArgumentParser(description='Similarity-based Knowledge Distillation')
     args = get_args(parser)
 
@@ -81,7 +98,6 @@ def main():
     teacher = Embedder(teacher)
 
     train_distillation(student, teacher, train_loader, valid_loader, device=args.device, 
-        train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size, 
         loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
         scheduler_choice=args.scheduler, patience=args.patience, early_stop=args.early_stop, 
         log_interval=args.log_interval, logger=logger, cosine=args.cosine)
