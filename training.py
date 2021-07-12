@@ -229,7 +229,7 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
 def train_similarity(model: nn.Module, 
     train_loader: torch.utils.data.DataLoader, 
     valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
-    augmentation: str = 'blur-sigma', alpha_max: int = 15, 
+    augmentation: str = 'blur-sigma', alpha_max: float = 15.0, 
     beta: float = 0.2, loss_function: nn.Module = nn.MSELoss, 
     epochs: int = 200, lr: float = 0.1, optimizer_choice: str = 'adam', 
     scheduler_choice: str = 'plateau', patience: int = 5, 
@@ -401,7 +401,7 @@ def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
 def train_similarity_epoch(model: nn.Module, device: torch.device, 
     train_loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
     optimizer: optim.Optimizer, epoch: int, log_interval: int, 
-    logger: Logger, augmentation: str, alpha_max: int, beta: float, 
+    logger: Logger, augmentation: str, alpha_max: float, beta: float, 
     cosine: bool, temp: float) -> None:
     """Train similarity-based embeddings for one epoch.
 
@@ -640,7 +640,7 @@ def compute_distillation_loss(student: nn.Module, teacher: nn.Module,
 
 def compute_similarity_loss(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
-    augmentation: str, alpha_max: int, beta: float, cosine: bool, 
+    augmentation: str, alpha_max: float, beta: float, cosine: bool, 
     temp: float, logger: Logger, subset: str) -> float:
     """Compute the similarity-based embedding loss.
 

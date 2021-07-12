@@ -10,8 +10,9 @@ import torch
 import numpy as np
 
 #Gaussian blur with parameter sigma (which controls the blur intensity)
-def gaussian_blur_sigma(data: torch.Tensor, sigma_max: int, 
-    beta: float, device = torch.device) -> tuple([torch.Tensor, torch.Tensor]):
+def gaussian_blur_sigma(data: torch.Tensor, sigma_max: float, 
+    beta: float, device = torch.device, random: bool = True
+    ) -> tuple([torch.Tensor, torch.Tensor]):
     """Apply gaussian blur with randomly sampled sigma parameter.
 
     Sigma is sampled uniformly i.i.d. for each image in the data,
@@ -22,6 +23,7 @@ def gaussian_blur_sigma(data: torch.Tensor, sigma_max: int,
         sigma_max: Largest possible augmentation intensity.
         beta: Similiarity probability parameter.
         device: Device on which to store batch.
+        random: If true, sample intensities i.i.d., otherwise use sigma_max.
 
     Returns:
         The augmented data and the similarity probabilities.
@@ -29,7 +31,10 @@ def gaussian_blur_sigma(data: torch.Tensor, sigma_max: int,
     """
     if sigma_max <= 0:
         raise ValueError("Maximum standard deviation must be positive.")
-    sigma = (torch.rand(data.shape[0])*sigma_max).to(device)
+    if random:
+        sigma = (torch.rand(data.shape[0])*sigma_max).to(device)
+    else:
+        sigma = (torch.ones(data.shape[0])*sigma_max).to(device)
     img_size = min(data.shape[2], data.shape[3])
     #Kernel size must be odd
     kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
@@ -41,7 +46,7 @@ def gaussian_blur_sigma(data: torch.Tensor, sigma_max: int,
     return data, sim_prob
 
 def gaussian_blur_kernel(data: torch.Tensor, device: torch.device, 
-    sigma: int = 8, beta: float = 0.2) -> tuple([torch.Tensor, torch.Tensor]):
+    sigma: float = 8.0, beta: float = 0.2) -> tuple([torch.Tensor, torch.Tensor]):
     """Apply gaussian blur with randomly sampled kernel size parameter.
 
     Kernel size is sampled uniformly i.i.d. (over valid values) for 
@@ -76,7 +81,7 @@ def gaussian_blur_kernel(data: torch.Tensor, device: torch.device,
     return data, sim_prob
 
 def augment(data: torch.Tensor, augmentation: str, device: torch.device, 
-    alpha_max: int = 15, beta: float = 0.2
+    alpha_max: float = 15.0, beta: float = 0.2, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
     """Perform data augmentation on input.
 
@@ -86,6 +91,7 @@ def augment(data: torch.Tensor, augmentation: str, device: torch.device,
         device: The device to store data on during augmentation.
         alpha_max: Largest possible augmentation intensity.
         beta: Similarity probability parameter.
+        random: Whether or not intensities are sampled i.i.d.
 
     Returns:
         The augmented data and the similarity probabilities.
@@ -97,7 +103,7 @@ def augment(data: torch.Tensor, augmentation: str, device: torch.device,
     #Sample an augmentation strength for each instance in the batch
     augmented_data = data.detach().clone()
     if augmentation == 'blur-sigma':
-        return gaussian_blur_sigma(augmented_data, alpha_max, beta, device)
+        return gaussian_blur_sigma(augmented_data, alpha_max, beta, device, random)
     elif augmentation == 'blur-kernel':
         return gaussian_blur_kernel(augmented_data, device)
     else:
