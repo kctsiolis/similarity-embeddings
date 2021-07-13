@@ -15,7 +15,7 @@ from torch import nn
 from matplotlib import pyplot as plt
 from data_augmentation import augment
 from training import get_model_similarity
-from models import Embedder, ResNet18
+from models import Embedder, ResNet18, ResNetSimCLR
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 
@@ -71,7 +71,7 @@ def plot_sims(sims: list, augmentation: str, alpha: float,
 def get_args(parser):
     parser.add_argument('--load-path', type=str,
                         help='Path to the model.')   
-    parser.add_argument('--model', type=str, choices=['resnet18'], default='resnet18',
+    parser.add_argument('--model', type=str, choices=['resnet18', 'simclr'], default='resnet18',
                         help='Type of model being evaluated.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'], default='cifar',
                         help='Dataset model was trained on.')
@@ -106,15 +106,21 @@ def main():
     #Get the data
     if args.dataset == 'mnist':
         one_channel = True
-        train_loader, valid_loader = mnist_train_loader(64, 1000, device=args.device)
+        _, valid_loader = mnist_train_loader(64, 1000, device=args.device)
     else:
         one_channel = False
-        train_loader, valid_loader = cifar_train_loader(64, 1000, device=args.device)
+        _, valid_loader = cifar_train_loader(64, 1000, device=args.device)
 
-    #For now, only ResNet18 is supported
     device = torch.device(args.device)
-    model = ResNet18(one_channel=one_channel)
-    model.load_state_dict(torch.load(args.load_path), strict=False)
+
+    if args.model == 'resnet18':
+        model = ResNet18(one_channel=one_channel)
+        model.load_state_dict(torch.load(args.load_path), strict=False)
+    else:
+        checkpoint = torch.load(args.load_path)
+        model = ResNetSimCLR(base_model='resnet18', out_dim=128)
+        model.load_state_dict(checkpoint['state_dict'])
+
     model = Embedder(model)
     model = model.to(device)
 

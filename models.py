@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torchvision.models import resnet18, resnet50
 
 class ResNet18(nn.Module):
@@ -36,7 +37,10 @@ class ResNet50(nn.Module):
 class Embedder(nn.Module):
     def __init__(self, model):
         super().__init__()
-        self.features = nn.Sequential(*list(model.model.children())[:-1])
+        try:
+            self.features = nn.Sequential(*list(model.model.children())[:-1])
+        except AttributeError:
+            self.features = nn.Sequential(*list(model.backbone.children())[:-1])
         self.dim = model.dim
 
     def forward(self, x):
@@ -102,3 +106,29 @@ class Classifier(nn.Module):
         x = self.linear_layer(x)
 
         return x
+
+class ResNetSimCLR(nn.Module):
+    """Class for the SimCLR model.
+
+    From PyTorch SimCLR repository.
+    https://github.com/sthalles/SimCLR/blob/master/  
+
+    """
+
+    def __init__(self, base_model, out_dim):
+        super(ResNetSimCLR, self).__init__()
+        self.resnet_dict = {"resnet18": resnet18(pretrained=False, num_classes=out_dim),
+                            "resnet50": resnet50(pretrained=False, num_classes=out_dim)}
+
+        self.backbone = self._get_basemodel(base_model)
+        dim_mlp = self.backbone.fc.in_features
+        self.dim = dim_mlp
+
+        # add mlp projection head
+        self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.backbone.fc)
+
+    def _get_basemodel(self, model_name):
+        return self.resnet_dict[model_name]
+
+    def forward(self, x):
+        return self.backbone(x)
