@@ -23,13 +23,14 @@ import numpy as np
 from torch import nn
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
+from imagenet import imagenet_train_loader
 from training import train_similarity
 from models import ResNet18, Embedder, NormalizedEmbedder
 from logger import Logger
 
 def get_args(parser):
     """Collect command line arguments."""
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
@@ -86,22 +87,24 @@ def main():
 
     #Get the data and initialize the model
     if args.dataset == 'mnist':
-        one_channel = True
-        logger = Logger('similarity', 'mnist', args)
         train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
             valid_batch_size=args.valid_batch_size, device=args.device)
-    else:
-        one_channel = False
-        logger = Logger('similarity', 'cifar', args)
+    elif args.dataset == 'cifar':
         train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-            valid_batch_size=args.valid_batch_size, device=args.device)
+            valid_batch_size=args.valid_batch_size, device=args.device, augs=args.augs)
+    else:
+        train_loader, valid_loader = imagenet_train_loader(batch_size=args.train_batch_size)
+
+    logger = Logger('similarity', args.dataset, args)
+    one_channel = args.dataset == 'mnist'
+    num_classes = 1000 if args.dataset == 'imagenet' else 10
 
     if args.loss == 'mse':
         loss_function = nn.MSELoss()
-        model = Embedder(ResNet18(one_channel=one_channel))
+        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
     else:
         loss_function = nn.KLDivLoss(reduction='batchmean')
-        model = NormalizedEmbedder(ResNet18(one_channel=one_channel))
+        model = NormalizedEmbedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
 
     train_similarity(model, train_loader, valid_loader, device=args.device, 
         augmentation=args.augmentation, alpha_max=args.alpha_max, 

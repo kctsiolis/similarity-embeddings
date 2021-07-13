@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torchvision.models import resnet18, resnet50
+from torchvision.models import resnet18, resnet50, resnet152
 
 class ResNet18(nn.Module):
     def __init__(self, num_classes=10, one_channel=False):
@@ -22,6 +22,21 @@ class ResNet50(nn.Module):
     def __init__(self, num_classes=10, one_channel=False):
         super().__init__()
         self.model = resnet50(num_classes=num_classes)
+        self.dim = 2048
+        if one_channel:
+            #Set number of input channels to 1 (since MNIST images are greyscale)
+            self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def get_dim(self):
+        return self.dim
+
+class ResNet152(nn.Module):
+    def __init__(self, num_classes=10, one_channel=False):
+        super().__init__()
+        self.model = resnet152(num_classes=num_classes)
         self.dim = 2048
         if one_channel:
             #Set number of input channels to 1 (since MNIST images are greyscale)

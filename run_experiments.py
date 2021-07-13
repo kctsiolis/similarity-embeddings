@@ -31,7 +31,7 @@ def get_args(parser):
     parser.add_argument('--type', type=str, choices=['teacher', 'distillation', 'similarity', 
         'linear_classifier', 'random'], metavar='T',
         help='The type of training.')
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=[64], nargs='+', metavar='N',
         help='Input batch size for training (default: 64)')

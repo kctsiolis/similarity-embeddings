@@ -40,7 +40,7 @@ class Logger:
 
         Args:
             type: Type of experiment (teacher, distillation, similarity, random, linear_classifier).
-            dataset: Dataset being used (MNIST or CIFAR).
+            dataset: Dataset being used (MNIST, CIFAR, or ImageNet).
             args: Command line arguments used to run experiment.
             verbose: Whether or not to print logger info to stdout.
 
@@ -67,6 +67,7 @@ class Logger:
         """
         self.log('Experiment Time: {}'.format(datetime.now()))
         self.log('Type: {}'.format(type))
+        self.log('Dataset: {}'.format(args.dataset))
         if type == 'teacher' or type == 'linear_classifier' or type == 'random':
             self.log('Loss Function: Cross Entropy')
         elif type == 'distillation':

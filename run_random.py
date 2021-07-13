@@ -17,12 +17,13 @@ from torch import nn
 from models import ResNet18, Embedder, Classifier
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
+from imagenet import imagenet_train_loader
 from training import train_sup
 from logger import Logger
 
 def get_args(parser):
     """Collect command line arguments."""
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'] ,metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
@@ -68,18 +69,20 @@ def main():
 
     #Get the data
     if args.dataset == 'mnist':
-        one_channel = True
-        logger = Logger('random', 'mnist', args)
         train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
             valid_batch_size=args.valid_batch_size, device=args.device)
-    else:
-        one_channel = False
-        logger = Logger('random', 'cifar', args)
+    elif args.dataset == 'cifar':
         train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-            valid_batch_size=args.valid_batch_size, device=args.device)
+            valid_batch_size=args.valid_batch_size, device=args.device, augs=args.augs)
+    else:
+        train_loader, valid_loader = imagenet_train_loader(batch_size=args.train_batch_size)
+
+    logger = Logger('random', args.dataset, args)
+    one_channel = args.dataset == 'mnist'
+    num_classes = 1000 if args.dataset == 'imagenet' else 10
 
     #Randomly initialized ResNet18 with frozen embedder, learnable linear layer
-    model = Classifier(Embedder(ResNet18(one_channel=one_channel)))
+    model = Classifier(Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes)))
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,
