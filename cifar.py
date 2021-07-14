@@ -6,6 +6,7 @@ Based on https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
 
 import torch
 from torchvision import datasets, transforms
+from torch.utils.data.distributed import DistributedSampler
 
 class TransformedDataset(torch.utils.data.Dataset):
     """Wrapper class for augmented dataset.
@@ -38,28 +39,28 @@ class TransformedDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
 
-def cifar_train_loader(train_batch_size: int = 64, valid_batch_size: int = 1000, 
-    device: str = 'cpu', augs: str = 'normalize'
+def cifar_train_loader(batch_size: int, device: torch.device, 
+    distributed: bool = False, augs: str = 'normalize'
     ) -> tuple([torch.utils.data.DataLoader, torch.utils.data.DataLoader]):
     """Load the CIFAR-10 training set and split into training and validation.
     
     Args:
-        train_batch_size: Training set batch size.
-        valid_batch_size: Validation set batch size.
-        device: String indicating which device to use.
+        batch_size: Batch size.
+        device: Device being used.
+        distributed: Whether or not we are conducting parallel computation.
         augs: Data augmentations to use.
 
     Returns:
         Training and validation set loaders.
 
     """
-    train_kwargs = {'batch_size': train_batch_size}
-    valid_kwargs = {'batch_size': valid_batch_size}
+    train_kwargs = {'batch_size': batch_size}
+    valid_kwargs = {'batch_size': batch_size}
     if device != "cpu":
         cuda_kwargs = {
             'num_workers': 1,
             'pin_memory': True,
-            'shuffle': True
+            'shuffle': not distributed
         }
         train_kwargs.update(cuda_kwargs)
         valid_kwargs.update(cuda_kwargs)
@@ -89,7 +90,12 @@ def cifar_train_loader(train_batch_size: int = 64, valid_batch_size: int = 1000,
     train_transformed = TransformedDataset(train_subset, transform_train)
     valid_transformed = TransformedDataset(valid_subset, transform_valid)
 
-    train_loader = torch.utils.data.DataLoader(train_transformed,**train_kwargs)
+    if distributed:
+        sampler = DistributedSampler(train_transformed)
+    else:
+        sampler = None
+
+    train_loader = torch.utils.data.DataLoader(train_transformed, sampler=sampler, **train_kwargs)
     valid_loader = torch.utils.data.DataLoader(valid_transformed, **valid_kwargs)
 
     return train_loader, valid_loader

@@ -22,13 +22,13 @@ from data_augmentation import augment
 from logger import Logger
 
 def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
-    valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
+    valid_loader: torch.utils.data.DataLoader, device: torch.device, 
     loss_function: nn.Module = nn.CrossEntropyLoss, epochs: int = 200, 
     lr: float = 0.1, optimizer_choice: str = 'adam', 
     scheduler_choice: str = 'plateau', patience: int = 5, 
-    early_stop: int = 10, log_interval: int = 10, 
-    logger: Logger = None) -> tuple([list([float]), list([float]), list([float]), 
-    list([float])]):
+    early_stop: int = 10, log_interval: int = 10, logger: Logger = None, 
+    rank: int = 0, num_devices: int = 1) -> tuple([list([float]), list([float]),
+    list([float]), list([float])]):
     """Supervised training loop.
 
     Args:
@@ -45,6 +45,8 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
         early_stop: Early stopping patience.
         log_interval: Number of batches between logs.
         logger: Logger object which tracks live training information.
+        rank: Rank of the current process (useful for multiprocessing).
+        num_devices: Number of devices.
 
     Returns:
         List of training losses, list of training accuracies, list of 
@@ -56,10 +58,6 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
         ValueError: Only Plateau and Cosine schedulers are supported.
     
     """
-    device = torch.device(device)
-    print("Running on device {}".format(device))
-    model = model.to(device)
-
     save_path = logger.get_model_path()
 
     if optimizer_choice == 'adam':
@@ -88,7 +86,8 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
     change_epochs = []
 
     for epoch in range(1, epochs + 1):
-        train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, log_interval, logger)
+        train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, 
+            log_interval, logger, rank, num_devices)
         train_loss, train_acc = predict(model, device, train_loader, loss_function, logger, "Train")
         val_loss, val_acc = predict(model, device, valid_loader, loss_function, logger, "Validation")
 
@@ -106,7 +105,7 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
             epochs_until_stop = early_stop
 
             #Save the current model (as it is the best one so far)
-            if save_path is not None:
+            if rank == 0 and save_path is not None:
                 logger.log("Saving model...")
                 torch.save(model.state_dict(), save_path)
                 logger.log("Model saved.\n")
@@ -161,7 +160,6 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
     
     """
     device = torch.device(device)
-    print("Running on device {}".format(device))
     student = student.to(device)
     teacher = teacher.to(device)
 
@@ -268,7 +266,6 @@ def train_similarity(model: nn.Module,
     
     """
     device = torch.device(device)
-    print("Running on device {}".format(device))
     model = model.to(device)
 
     save_path = logger.get_model_path()
@@ -335,7 +332,7 @@ def train_similarity(model: nn.Module,
 def train_sup_epoch(model: nn.Module, device: torch.device, 
     train_loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
     optimizer: optim.Optimizer, epoch: int, log_interval: int, 
-    logger: Logger) -> None:
+    logger: Logger, rank: int, num_devices: int) -> None:
     """Train in supervised fashion for one epoch.
 
     Args:
@@ -347,6 +344,8 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
         epoch: The current epoch number.
         log_interval: Number of batches between logs.
         logger: Logger object which tracks live training information.
+        rank: Rank of the current device.
+        num_devices: Number of devices used for training.
     
     """
     model.train()
@@ -359,8 +358,9 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
         optimizer.step()
         if batch_idx % log_interval == 0:
             log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item())
+                epoch, (batch_idx * len(data))*num_devices + len(data)*rank, 
+                len(train_loader.dataset), 100. * batch_idx / len(train_loader), 
+                loss.item())
             logger.log(log_str)
 
 def train_distillation_epoch(student: nn.Module, teacher: nn.Module,

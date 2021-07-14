@@ -7,28 +7,29 @@ https://github.com/pytorch/examples/blob/master/mnist/main.py
 
 import torch
 from torchvision import datasets, transforms
+from torch.utils.data.distributed import DistributedSampler
 
-def mnist_train_loader(train_batch_size: int = 64, 
-    valid_batch_size: int = 1000, device: str = 'cpu'
-    ) -> tuple([torch.utils.data.DataLoader, torch.utils.data.DataLoader]):
+def mnist_train_loader(batch_size: int, device: torch.device,
+    distributed: bool = False) -> tuple([torch.utils.data.DataLoader, 
+    torch.utils.data.DataLoader]):
     """Load the MNIST training set and split into training and validation.
 
     Args:
-        train_batch_size: Training set batch size.
-        valid_batch_size: Validation set batch size.
-        device: String indicating which device to use.
+        batch_size: Batch size.
+        device: Device being used.
+        distributed: Whether or not we are conducting parallel computation.
 
     Returns:
         Training set and validation set loaders.
 
     """
-    train_kwargs = {'batch_size': train_batch_size}
-    valid_kwargs = {'batch_size': valid_batch_size}
+    train_kwargs = {'batch_size': batch_size}
+    valid_kwargs = {'batch_size': batch_size}
     if device != "cpu":
         cuda_kwargs = {
             'num_workers': 1,
             'pin_memory': True,
-            'shuffle': True
+            'shuffle': not distributed
         }
         train_kwargs.update(cuda_kwargs)
         valid_kwargs.update(cuda_kwargs)
@@ -45,8 +46,13 @@ def mnist_train_loader(train_batch_size: int = 64,
     #Split original training set into new training and validation sets
     train_subset, valid_subset = torch.utils.data.random_split(train_set,
         [50000, 10000])
+
+    if distributed:
+        sampler = DistributedSampler(train_subset)
+    else:
+        sampler = None
         
-    train_loader = torch.utils.data.DataLoader(train_subset,**train_kwargs)
+    train_loader = torch.utils.data.DataLoader(train_subset, sampler=sampler, **train_kwargs)
     valid_loader = torch.utils.data.DataLoader(valid_subset, **valid_kwargs)
 
     return train_loader, valid_loader

@@ -74,7 +74,7 @@ class Logger:
             self.log('Loss Function: MSE')
         else:
             self.log('Loss Function: {}'.format(args.loss))
-        self.log('Train Batch Size: {}'.format(args.train_batch_size))
+        self.log('Batch Size: {}'.format(args.batch_size))
         self.log('Learning Rate : {}'.format(args.lr))
         self.log('Optimizer: {}'.format(args.optimizer))
         self.log('Scheduler: {}'.format(args.scheduler))
@@ -134,7 +134,7 @@ def make_log_dir(type: str, dataset: str, args: Namespace) -> None:
     """
 
     exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(type, dataset,
-        args.train_batch_size, args.lr, args.optimizer, args.seed, args.model)
+        args.batch_size, args.lr, args.optimizer, args.seed, args.model)
     if type == 'similarity' or type == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
     if type == 'similarity':

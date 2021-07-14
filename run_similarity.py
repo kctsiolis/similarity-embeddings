@@ -32,10 +32,8 @@ def get_args(parser):
     """Collect command line arguments."""
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
-    parser.add_argument('--train-batch-size', type=int, default=64, metavar='N',
-        help='Input batch size for training (default: 64)')
-    parser.add_argument('--valid-batch-size', type=int, default=1000, metavar='N',
-        help='Input batch size for validation (default:1000)')
+    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+        help='Batch size (default: 64)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
@@ -83,17 +81,18 @@ def main():
     np.random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
+    torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
 
     #Get the data and initialize the model
     if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(train_batch_size=args.train_batch_size,
-            valid_batch_size=args.valid_batch_size, device=args.device)
+        train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size, 
+            device=args.device)
     elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-            valid_batch_size=args.valid_batch_size, device=args.device)
+        train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
+            device=args.device)
     else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=args.train_batch_size)
+        train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
 
     logger = Logger('similarity', args.dataset, args)
     one_channel = args.dataset == 'mnist'

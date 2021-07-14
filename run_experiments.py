@@ -33,8 +33,8 @@ def get_args(parser):
         help='The type of training.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
-    parser.add_argument('--train-batch-size', type=int, default=[64], nargs='+', metavar='N',
-        help='Input batch size for training (default: 64)')
+    parser.add_argument('--batch-size', type=int, default=[64], nargs='+', metavar='N',
+        help='Batch size (default: 64)')
     parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=[0.01], nargs='+', metavar='LR',
@@ -101,8 +101,8 @@ def make_script(args):
         if args.type == 'similarity':
             command_start += '--augmentation {} '.format(args.augmentation)
 
-        for batch_size in args.train_batch_size:
-            command_batch = command_start + '--train-batch-size {} '.format(batch_size)
+        for batch_size in args.batch_size:
+            command_batch = command_start + '--batch-size {} '.format(batch_size)
 
             for lr in args.lr:
                 command_lr = command_batch + '--lr {} '.format(lr)

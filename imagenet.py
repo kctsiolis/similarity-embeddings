@@ -7,7 +7,6 @@ Adapted from original code by Vikram Voleti. Used with his permission.
 import h5py
 import io
 import json
-import numpy as np
 import os
 import torch
 
