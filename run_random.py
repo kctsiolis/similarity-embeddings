@@ -73,7 +73,7 @@ def main():
             valid_batch_size=args.valid_batch_size, device=args.device)
     elif args.dataset == 'cifar':
         train_loader, valid_loader = cifar_train_loader(train_batch_size=args.train_batch_size,
-            valid_batch_size=args.valid_batch_size, device=args.device, augs=args.augs)
+            valid_batch_size=args.valid_batch_size, device=args.device)
     else:
         train_loader, valid_loader = imagenet_train_loader(batch_size=args.train_batch_size)
 
