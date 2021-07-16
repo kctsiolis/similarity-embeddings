@@ -95,7 +95,7 @@ def main():
     else:
         student = ConvNetEmbedder(one_channel=one_channel)
 
-    teacher.model.load_state_dict(torch.load(args.load_path), strict=False)
+    teacher.model.load_state_dict(torch.load(args.load_path))
     #We only care about the teacher's embeddings
     teacher = Embedder(teacher)
 

@@ -4,9 +4,11 @@ import torch.nn.functional as F
 from torchvision.models import resnet18, resnet50, resnet152
 
 class ResNet18(nn.Module):
-    def __init__(self, num_classes=10, one_channel=False):
+    def __init__(self, num_classes=10, one_channel=False, pretrained=False):
         super().__init__()
-        self.model = resnet18(num_classes=num_classes)
+        if pretrained:
+            assert num_classes == 1000
+        self.model = resnet18(num_classes=num_classes, pretrained=pretrained)
         self.dim = 512
         if one_channel:
             #Set number of input channels to 1 (since MNIST images are greyscale)

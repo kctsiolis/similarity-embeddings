@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from sklearn.decomposition import PCA
-from compare_kernels import load_matrix, l2_normalization
+from embeddings import load_embeddings, normalize_embeddings
 
 def get_args(parser):
     parser.add_argument('-n', dest='num_components', type=int, help='Number of principal components.',
@@ -22,12 +22,12 @@ def embedding_pca(args):
     save_path = args.save_path
 
     print("Loading embeddings...")
-    W = load_matrix(embs_file)
+    W = load_embeddings(embs_file)
     print("Embeddings loaded.")
 
     if args.normalize == 'true':
         print("Embeddings will be L2 normalized.")
-        W = l2_normalization(W)
+        W = normalize_embeddings(W)
 
     print("Applying PCA with {} components...".format(num_components))
     pca = PCA(n_components = num_components)

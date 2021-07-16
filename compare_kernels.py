@@ -2,6 +2,7 @@
 
 import argparse
 import numpy as np
+from embeddings import load_embeddings, normalize_embeddings, compute_similarity_matrix
 
 def get_args(parser):
     parser.add_argument('--m1', dest='m1', help='.npy file containing first matrix.',
@@ -17,20 +18,6 @@ def get_args(parser):
 
     return parser
 
-def load_matrix(m_file):
-    #Load the Gram matrix (this can be memory intensive)
-    m = np.load(m_file)
-
-    return m
-
-def l2_normalization(m):
-    l2norm = np.sqrt((m * m).sum(axis=1))
-    return m / l2norm.reshape(m.shape[0],1)
-
-#Given a matrix M, compute M^T * M
-def compute_kernel(m):
-    return np.matmul(m,np.transpose(m))
-
 def compare_kernels(args):
     #Get filenames for matrices
     m1_file = args.m1
@@ -39,22 +26,22 @@ def compare_kernels(args):
     normalize = args.normalize
 
     print("Loading first matrix...")
-    m1 = load_matrix(m1_file)
+    m1 = load_embeddings(m1_file)
     print("Loaded first matrix.")
     print("Loading second matrix...")
-    m2 = load_matrix(m2_file)
+    m2 = load_embeddings(m2_file)
     print("Loaded second matrix.\n")
 
     if normalize == 'true':
         print("Matrices will be L2 normalized.")
-        m1 = l2_normalization(m1)
-        m2 = l2_normalization(m2)
+        m1 = normalize_embeddings(m1)
+        m2 = normalize_embeddings(m2)
     
     print("Computing first kernel...")
-    k1 = compute_kernel(m1)
+    k1 = compute_similarity_matrix(m1)
     print("Computed first kernel.")
     print("Computing second kernel...")
-    k2 = compute_kernel(m2)
+    k2 = compute_similarity_matrix(m2)
     print("Computed second kernel.\n")
 
     dist = compute_distance(k1,k2,args)
