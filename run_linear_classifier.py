@@ -18,7 +18,7 @@ import argparse
 import torch
 import numpy as np
 from torch import nn
-from models import Classifier, Embedder, ResNet18, ConvNetEmbedder
+from models import Classifier, Embedder, ResNet18, ResNet50, ConvNetEmbedder
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
@@ -31,8 +31,6 @@ def get_args(parser):
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Batch size (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
-        help='Input batch size for testing (default:1000)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
@@ -41,11 +39,11 @@ def get_args(parser):
                         help='Choice of optimizer for training.')
     parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='plateau',
                         help='Choice of scheduler for training.')
-    parser.add_argument('--patience', type=int,
+    parser.add_argument('--patience', type=int, default=5,
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--early-stop', type=int, default=5, metavar='E',
+    parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
@@ -53,8 +51,9 @@ def get_args(parser):
                         help='Path to the distilled "student" model.')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18'],
-                        help='Choice of model for the student.')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 
+                        'resnet18', 'resnet50_simclr'],
+                        help='Type of model for the embedder.')
     args = parser.parse_args()
 
     return args
@@ -74,14 +73,16 @@ def main():
 
     if args.load_path is None:
         return ValueError('Path to the embedder is required.')
+
+    device = torch.device(args.device)
     
     #Get the data
     if args.dataset == 'mnist':
         train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size,
-            device=args.device)
+            device=device)
     elif args.dataset == 'cifar':
         train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
-            device=args.device)
+            device=device)
     else:
         train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
 
@@ -91,11 +92,18 @@ def main():
 
     if args.model == 'cnn':
         embedder = ConvNetEmbedder(one_channel=one_channel)
-    else:
+        embedder.load_state_dict(torch.load(args.load_path))
+    elif args.model == 'resnet18':
         embedder = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
-
-    embedder.load_state_dict(torch.load(args.load_path), strict=False)
+        embedder.load_state_dict(torch.load(args.load_path))
+    else:
+        checkpoint = torch.load(args.load_path)
+        embedder = ResNet50(num_classes=1000)
+        embedder.model.load_state_dict(checkpoint['state_dict'])
+        embedder = Embedder(embedder)
+        
     model = Classifier(embedder)
+    model.to(device)
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=args.device,

@@ -68,7 +68,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     if distributed:
         dist.init_process_group(backend='nccl', init_method='tcp://localhost:29500',
             world_size=num_gpus, rank=idx)
-        batch_size = int(args.batch_size / num_gpus)
+        
+    batch_size = int(args.batch_size / num_gpus)
 
     #Get the data
     if args.dataset == 'mnist':

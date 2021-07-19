@@ -110,13 +110,15 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
                 torch.save(model.state_dict(), save_path)
                 logger.log("Model saved.\n")
 
-        scheduler.step(val_loss)
-
         if scheduler_choice == 'plateau':
+            scheduler.step(val_loss)
             if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
                 change_epochs.append(epoch)
                 lr = plateau_factor * lr
                 logger.log("Learning rate decreasing to {}\n".format(lr))
+        else:
+            scheduler.step()
+            
 
     train_report(train_losses, val_losses, train_accs, val_accs, change_epochs=change_epochs, logger=logger)
 
@@ -485,7 +487,10 @@ def predict(model: nn.Module, device: torch.device,
 
     log_str = '\n{} set: Average loss: {:.6f}, Accuracy: {}/{} ({:.2f}%)\n'.format(subset,
         loss, correct, len(loader.dataset), acc)
-    logger.log(log_str)
+    if logger is not None:
+        logger.log(log_str)
+    else:
+        print(log_str)
 
     return loss, acc
 

@@ -19,7 +19,7 @@ from torch import nn
 from matplotlib import pyplot as plt
 from data_augmentation import augment
 from embeddings import compute_similarity_matrix, normalize_embeddings
-from training import get_model_similarity, get_embeddings
+from training import get_model_similarity, get_embeddings, predict
 from models import Embedder, ResNet18, ResNet50, ResNetSimCLR
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
@@ -27,8 +27,8 @@ from cifar import cifar_train_loader
 def get_args(parser):
     parser.add_argument('--load-path', type=str,
                         help='Path to the model.')   
-    parser.add_argument('--model', type=str, choices=['resnet18_classifier', 'resnet18_embedder', 'simclr',
-                        'simclr_pretrained'], 
+    parser.add_argument('--model', type=str, choices=['resnet18_classifier', 'resnet18_embedder', 
+                        'resnet50_pretrained', 'simclr', 'simclr_pretrained'], 
                         default='resnet18',
                         help='Type of model being evaluated.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'], default='cifar',
@@ -136,6 +136,11 @@ def main():
     elif args.model == 'resnet18_embedder':
         model = Embedder(ResNet18())
         model.load_state_dict(torch.load(args.load_path))
+    elif args.model == 'resnet50_pretrained':
+        model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
+        #model = Embedder(model, dim=64)
+        model.to(device)
+        predict(model, device, valid_loader, nn.CrossEntropyLoss(), None, "Validation")
     elif args.model == 'simclr':
         checkpoint = torch.load(args.load_path)
         model = ResNetSimCLR(base_model='resnet18', out_dim=128)

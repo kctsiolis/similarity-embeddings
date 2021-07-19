@@ -52,13 +52,19 @@ class ResNet152(nn.Module):
 
 #Model without linear classification layer
 class Embedder(nn.Module):
-    def __init__(self, model):
+    def __init__(self, model, dim=None):
         super().__init__()
         try:
             self.features = nn.Sequential(*list(model.model.children())[:-1])
         except AttributeError:
-            self.features = nn.Sequential(*list(model.backbone.children())[:-1])
-        self.dim = model.dim
+            try:
+                self.features = nn.Sequential(*list(model.backbone.children())[:-1])
+            except AttributeError:
+                self.features = nn.Sequential(*list(model.children())[:-1])
+        try:
+            self.dim = model.dim
+        except AttributeError:
+            self.dim = dim
 
     def forward(self, x):
         x = self.features(x)
