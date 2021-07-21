@@ -56,20 +56,22 @@ class ResNet152(nn.Module):
 
 #Model without linear classification layer
 class Embedder(nn.Module):
-    def __init__(self, model, dim=None):
+    def __init__(self, model):
         super().__init__()
+        #Get the embedding layers from the given model
+        #The attribute containing the model's layers may go by different names
         try:
+            self.features = nn.Sequential(*list(model.children())[:-1])
+        except AttributeError:
             self.features = nn.Sequential(*list(model.model.children())[:-1])
         except AttributeError:
-            try:
-                self.features = nn.Sequential(*list(model.backbone.children())[:-1])
-            except AttributeError:
-                self.features = nn.Sequential(*list(model.children())[:-1])
+            self.features = nn.Sequential(*list(model.backbone.children())[:-1])
+
         try:
             self.dim = model.dim
         except AttributeError:
-            self.dim = dim
-
+            self.dim = None
+                
     def forward(self, x):
         x = self.features(x)
         x = torch.flatten(x, 1)

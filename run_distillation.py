@@ -75,13 +75,15 @@ def main():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
 
+    device = torch.device(args.device)
+
     #Get the data
     if args.dataset == 'mnist':
         train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size,
-            device=args.device)
+            device=device)
     elif args.dataset == 'cifar':
         train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
-            device=args.device)
+            device=device)
     else:
         train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
 
@@ -99,7 +101,7 @@ def main():
     #We only care about the teacher's embeddings
     teacher = Embedder(teacher)
 
-    train_distillation(student, teacher, train_loader, valid_loader, device=args.device, 
+    train_distillation(student, teacher, train_loader, valid_loader, device=device, 
         loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
         scheduler_choice=args.scheduler, patience=args.patience, early_stop=args.early_stop, 
         log_interval=args.log_interval, logger=logger, cosine=args.cosine)

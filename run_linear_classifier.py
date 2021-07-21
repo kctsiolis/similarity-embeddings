@@ -106,7 +106,7 @@ def main():
     model.to(device)
 
     #Train the model
-    train_sup(model, train_loader, valid_loader, device=args.device,
+    train_sup(model, train_loader, valid_loader, device=device,
         loss_function=nn.CrossEntropyLoss(), epochs=args.epochs, lr=args.lr, 
         optimizer_choice=args.optimizer, scheduler_choice=args.scheduler, 
         patience=args.patience, early_stop=args.early_stop, 

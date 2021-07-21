@@ -56,7 +56,7 @@ def cifar_train_loader(batch_size: int, device: torch.device,
     """
     train_kwargs = {'batch_size': batch_size}
     valid_kwargs = {'batch_size': batch_size}
-    if device != "cpu":
+    if device.type == 'cuda':
         cuda_kwargs = {
             'num_workers': 1,
             'pin_memory': True,

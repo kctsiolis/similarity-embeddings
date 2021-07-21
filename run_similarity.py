@@ -84,13 +84,15 @@ def main():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
 
+    device = torch.device(args.device)
+
     #Get the data and initialize the model
     if args.dataset == 'mnist':
         train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size, 
-            device=args.device)
+            device=device)
     elif args.dataset == 'cifar':
         train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
-            device=args.device)
+            device=device)
     else:
         train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
 
@@ -105,7 +107,7 @@ def main():
         loss_function = nn.KLDivLoss(reduction='batchmean')
         model = NormalizedEmbedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
 
-    train_similarity(model, train_loader, valid_loader, device=args.device, 
+    train_similarity(model, train_loader, valid_loader, device=device, 
         augmentation=args.augmentation, alpha_max=args.alpha_max, 
         loss_function=loss_function, epochs=args.epochs, lr=args.lr, 
         optimizer_choice=args.optimizer, scheduler_choice=args.scheduler, patience=args.patience, 

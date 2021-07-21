@@ -126,7 +126,7 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
 
 def train_distillation(student: nn.Module, teacher: nn.Module, 
     train_loader: torch.utils.data.DataLoader, 
-    valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
+    valid_loader: torch.utils.data.DataLoader, device: torch.device, 
     loss_function: nn.Module = nn.MSELoss, epochs: int = 200, 
     lr: float = 0.1, optimizer_choice: str = 'adam', 
     scheduler_choice: str = 'plateau', patience: int = 5, 
@@ -161,7 +161,6 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
         ValueError: Only Plateau and Cosine schedulers are supported.
     
     """
-    device = torch.device(device)
     student = student.to(device)
     teacher = teacher.to(device)
 
@@ -228,7 +227,7 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
 
 def train_similarity(model: nn.Module, 
     train_loader: torch.utils.data.DataLoader, 
-    valid_loader: torch.utils.data.DataLoader, device: str = 'cpu', 
+    valid_loader: torch.utils.data.DataLoader, device: torch.device, 
     augmentation: str = 'blur-sigma', alpha_max: float = 15.0, 
     beta: float = 0.2, loss_function: nn.Module = nn.MSELoss, 
     epochs: int = 200, lr: float = 0.1, optimizer_choice: str = 'adam', 
@@ -267,7 +266,6 @@ def train_similarity(model: nn.Module,
         ValueError: Only Plateau and Cosine schedulers are supported.
     
     """
-    device = torch.device(device)
     model = model.to(device)
 
     save_path = logger.get_model_path()
@@ -492,7 +490,7 @@ def predict(model: nn.Module, device: torch.device,
     return loss, acc
 
 def get_embeddings(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, emb_dim: int
+    loader: torch.utils.data.DataLoader
     ) -> tuple([np.ndarray, np.ndarray]):
     """Get model's embeddings on data in numpy format.
     
@@ -500,7 +498,6 @@ def get_embeddings(model: nn.Module, device: torch.device,
         model: The model computing the embeddings.
         device: The device on which the model and data are stored.
         loader: The input.
-        emb_dim: The embedding dimension.
 
     Returns:
         The embeddings and labels for all instances in the data.
@@ -509,7 +506,7 @@ def get_embeddings(model: nn.Module, device: torch.device,
     model.to(device)
     model.eval()
 
-    embeddings = np.zeros((0, emb_dim))
+    embeddings = np.zeros((0, 0))
     labels = np.zeros((0))
 
     with torch.no_grad():

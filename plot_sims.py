@@ -23,6 +23,7 @@ from training import get_model_similarity, get_embeddings, predict
 from models import Embedder, ResNet18, ResNet50, ResNetSimCLR
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
+from imagenet import imagenet_train_loader
 
 def get_args(parser):
     parser.add_argument('--load-path', type=str,
@@ -129,9 +130,12 @@ def main():
     if args.dataset == 'mnist':
         one_channel = True
         _, valid_loader = mnist_train_loader(64, device=device)
-    else:
+    elif args.dataset == 'cifar':
         one_channel = False
         _, valid_loader = cifar_train_loader(64, device=device)
+    else:
+        one_channel = False
+        _, valid_loader = imagenet_train_loader(64, device=device)
 
     if args.model == 'resnet18_classifier':
         model = ResNet18(one_channel=one_channel)
@@ -148,7 +152,7 @@ def main():
         model.load_state_dict(torch.load(args.load_path))
     elif args.model == 'resnet50_pretrained':
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        model = Embedder(model, dim=64)
+        model = Embedder(model)
     elif args.model == 'simclr':
         checkpoint = torch.load(args.load_path)
         model = ResNetSimCLR(base_model='resnet18', out_dim=128)
