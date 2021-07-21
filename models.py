@@ -56,7 +56,7 @@ class ResNet152(nn.Module):
 
 #Model without linear classification layer
 class Embedder(nn.Module):
-    def __init__(self, model):
+    def __init__(self, model, dim=None):
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
@@ -70,7 +70,7 @@ class Embedder(nn.Module):
         try:
             self.dim = model.dim
         except AttributeError:
-            self.dim = None
+            self.dim = dim
                 
     def forward(self, x):
         x = self.features(x)

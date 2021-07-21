@@ -349,18 +349,20 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
     
     """
     model.train()
+    running_loss = AverageMeter('Training Loss', ':.6f')
+    progress = ProgressMeter(len(train_loader),
+        [running_loss],
+        prefix='Epoch: {}'.format(epoch))
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
         loss = loss_function(output, target)
+        running_loss.update(loss.item(), data.size(0))
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
-            log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                epoch, (batch_idx * len(data))*num_devices + len(data)*rank, 
-                len(train_loader.dataset), 100. * batch_idx / len(train_loader), 
-                loss.item())
+            log_str = progress.display(batch_idx)
             logger.log(log_str)
 
 def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
@@ -490,7 +492,7 @@ def predict(model: nn.Module, device: torch.device,
     return loss, acc
 
 def get_embeddings(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader
+    loader: torch.utils.data.DataLoader, emb_dim: int
     ) -> tuple([np.ndarray, np.ndarray]):
     """Get model's embeddings on data in numpy format.
     
@@ -498,6 +500,7 @@ def get_embeddings(model: nn.Module, device: torch.device,
         model: The model computing the embeddings.
         device: The device on which the model and data are stored.
         loader: The input.
+        emb_dim: The embedding dimension.
 
     Returns:
         The embeddings and labels for all instances in the data.
@@ -506,7 +509,7 @@ def get_embeddings(model: nn.Module, device: torch.device,
     model.to(device)
     model.eval()
 
-    embeddings = np.zeros((0, 0))
+    embeddings = np.zeros((0, emb_dim))
     labels = np.zeros((0))
 
     with torch.no_grad():
@@ -742,3 +745,42 @@ def train_plots(train_vals: list([float]), val_vals: list([float]),
     plt.xlabel('Epoch')
     plt.ylabel(y_label)
     plt.savefig(save_dir + '/' + y_label + '_plots')
+
+class AverageMeter():
+    """Computes and stores the average and current value"""
+    def __init__(self, name, fmt=':f'):
+        self.name = name
+        self.fmt = fmt
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+    def __str__(self):
+        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
+        return fmtstr.format(**self.__dict__)
+
+class ProgressMeter():
+    def __init__(self, num_batches, meters, prefix=""):
+        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
+        self.meters = meters
+        self.prefix = prefix
+
+    def display(self, batch):
+        entries = [self.prefix + self.batch_fmtstr.format(batch)]
+        entries += [str(meter) for meter in self.meters]
+        return '\t'.join(entries)
+
+    def _get_batch_fmtstr(self, num_batches):
+        num_digits = len(str(num_batches // 1))
+        fmt = '{:' + str(num_digits) + 'd}'
+        return '[' + fmt + '/' + fmt.format(num_batches) + ']'

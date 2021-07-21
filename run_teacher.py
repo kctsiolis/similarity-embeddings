@@ -62,7 +62,7 @@ def get_args(parser):
 
 def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
     device = torch.device(args.device[idx])
-    if device != 'cpu':
+    if device.type == 'cuda':
         torch.cuda.set_device(device)
 
     if distributed:
@@ -104,7 +104,6 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         optimizer_choice=args.optimizer, scheduler_choice=args.scheduler, 
         patience=args.patience, early_stop=args.early_stop, 
         log_interval=args.log_interval, logger=logger, rank=idx, num_devices=num_gpus)
-
 
 def main():
     """Load arguments, the dataset, and initiate the training loop."""

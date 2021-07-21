@@ -32,7 +32,7 @@ def get_args(parser):
                         'resnet18_embedder', 'resnet50_pretrained', 'simclr', 'simclr_pretrained'], 
                         default='resnet18',
                         help='Type of model being evaluated.')
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'], default='cifar',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'], default='cifar',
                         help='Dataset model was trained on.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'none'], default='blur-sigma',
                         help='Type of augmentation to use.') 
@@ -135,7 +135,7 @@ def main():
         _, valid_loader = cifar_train_loader(64, device=device)
     else:
         one_channel = False
-        _, valid_loader = imagenet_train_loader(64, device=device)
+        _, valid_loader = imagenet_train_loader(64)
 
     if args.model == 'resnet18_classifier':
         model = ResNet18(one_channel=one_channel)
@@ -152,12 +152,12 @@ def main():
         model.load_state_dict(torch.load(args.load_path))
     elif args.model == 'resnet50_pretrained':
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        model = Embedder(model)
+        model = Embedder(model, dim=64)
     elif args.model == 'simclr':
         checkpoint = torch.load(args.load_path)
         model = ResNetSimCLR(base_model='resnet18', out_dim=128)
         model.load_state_dict(checkpoint['state_dict'])
-        model = Embedder(model)
+        model = Embedder(model, dim=128)
     else:
         checkpoint = torch.load(args.load_path)
         model = ResNet50(num_classes=1000)
