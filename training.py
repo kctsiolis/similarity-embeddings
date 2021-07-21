@@ -487,10 +487,7 @@ def predict(model: nn.Module, device: torch.device,
 
     log_str = '\n{} set: Average loss: {:.6f}, Accuracy: {}/{} ({:.2f}%)\n'.format(subset,
         loss, correct, len(loader.dataset), acc)
-    if logger is not None:
-        logger.log(log_str)
-    else:
-        print(log_str)
+    logger.log(log_str)
 
     return loss, acc
 

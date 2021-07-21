@@ -27,14 +27,12 @@ from cifar import cifar_train_loader
 def get_args(parser):
     parser.add_argument('--load-path', type=str,
                         help='Path to the model.')   
-    parser.add_argument('--model', type=str, choices=['resnet18_classifier', 'resnet18_embedder', 
-                        'resnet50_pretrained', 'simclr', 'simclr_pretrained'], 
+    parser.add_argument('--model', type=str, choices=['resnet18_classifier', 'resnet18_pretrained',
+                        'resnet18_embedder', 'resnet50_pretrained', 'simclr', 'simclr_pretrained'], 
                         default='resnet18',
                         help='Type of model being evaluated.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar'], default='cifar',
                         help='Dataset model was trained on.')
-    parser.add_argument('--pretrained', action='store_true',
-                        help='Use a pre-trained model from the web.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'none'], default='blur-sigma',
                         help='Type of augmentation to use.') 
     parser.add_argument('--alpha', type=float, default=1.0,
@@ -101,6 +99,18 @@ def plot_sims(sims: list, augmentation: str, alpha: float,
         plt.title('Model similarities for {} with intensity {}'.format(augmentation, alpha))
     plt.savefig(save_path)
 
+def summary(sims):
+    print('Minimum: {:.4f}'.format(min(sims)))
+    print('Maximum: {:.4f}'.format(max(sims)))
+    print('Mean: {:.4f}'.format(np.mean(sims)))
+    print('Standard deviation: {:.4f}'.format(np.std(sims)))
+    print('1st Percentile: {:.4f}'.format(np.percentile(sims, 1)))
+    print('2.5th Percentile: {:.4f}'.format(np.percentile(sims, 2.5)))
+    print('5th Percentile: {:.4f}'.format(np.percentile(sims, 5)))
+    print('25th Percentile: {:.4f}'.format(np.percentile(sims, 25)))
+    print('Median: {:.4f}'.format(np.percentile(sims, 50)))
+    print('75th Percentile: {:.4f}'.format(np.percentile(sims, 75)))
+
 def main():
     """Load the data, compute similarities, and plot them."""
     parser = argparse.ArgumentParser(description='Plotting model similarities.')
@@ -124,23 +134,21 @@ def main():
         _, valid_loader = cifar_train_loader(64, device=device)
 
     if args.model == 'resnet18_classifier':
-        num_classes = 1000 if args.pretrained else 10
-        model = ResNet18(one_channel=one_channel, num_classes=num_classes,
-            pretrained=args.pretrained)
-        if not args.pretrained:
-            try:
-                model.load_state_dict(torch.load(args.load_path))
-            except RuntimeError:
-                model.model.load_state_dict(torch.load(args.load_path))
+        model = ResNet18(one_channel=one_channel)
+        try:
+            model.load_state_dict(torch.load(args.load_path))
+        except RuntimeError:
+            model.model.load_state_dict(torch.load(args.load_path))
+        model = Embedder(model)
+    elif args.model == 'resnet18_pretrained':
+        model = ResNet18(num_classes=1000, pretrained=True)
         model = Embedder(model)
     elif args.model == 'resnet18_embedder':
         model = Embedder(ResNet18())
         model.load_state_dict(torch.load(args.load_path))
     elif args.model == 'resnet50_pretrained':
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        #model = Embedder(model, dim=64)
-        model.to(device)
-        predict(model, device, valid_loader, nn.CrossEntropyLoss(), None, "Validation")
+        model = Embedder(model, dim=64)
     elif args.model == 'simclr':
         checkpoint = torch.load(args.load_path)
         model = ResNetSimCLR(base_model='resnet18', out_dim=128)
@@ -155,24 +163,38 @@ def main():
     model = model.to(device)
 
     if args.augmentation == 'none':
-        model_embs, _ = get_embeddings(model, device, valid_loader, model.get_dim())
+        model_embs, labels = get_embeddings(model, device, valid_loader, model.get_dim())
         if args.cosine:
             model_embs = normalize_embeddings(model_embs)
-        model_sims = compute_similarity_matrix(model_embs).flatten().tolist()
+
+        sorted_embs = []
+        c = int(np.max(labels) + 1)
+
+        for i in range(c):
+            sorted_embs.append(model_embs[np.where(labels == i)])
+
+        intra_class_sims = []
+        inter_class_sims = []
+        for i in range(c):
+            intra_class_sims += np.matmul(sorted_embs[i], np.transpose(sorted_embs[i])).flatten().tolist()
+            if i < c - 1: 
+                for j in range(i+1, c):
+                    inter_class_sims += np.matmul(sorted_embs[i], np.transpose(sorted_embs[j])).flatten().tolist()
+
+        print('INTRA CLASS SIMS:')
+        summary(intra_class_sims)
+
+        print('INTER CLASS SIMS:')
+        summary(inter_class_sims)
+
+        print('OVERALL SIMS:')
+        model_sims = intra_class_sims + 2 * inter_class_sims
+        summary(model_sims)
     else:
         model_sims = collect_sims(model, valid_loader, args.augmentation,
             device, args.alpha, args.cosine)
 
-    print('Minimum: {:.4f}'.format(min(model_sims)))
-    print('Maximum: {:.4f}'.format(max(model_sims)))
-    print('Mean: {:.4f}'.format(np.mean(model_sims)))
-    print('Standard deviation: {:.4f}'.format(np.std(model_sims)))
-    print('1st Percentile: {:.4f}'.format(np.percentile(model_sims, 1)))
-    print('2.5th Percentile: {:.4f}'.format(np.percentile(model_sims, 2.5)))
-    print('5th Percentile: {:.4f}'.format(np.percentile(model_sims, 5)))
-    print('25th Percentile: {:.4f}'.format(np.percentile(model_sims, 25)))
-    print('Median: {:.4f}'.format(np.percentile(model_sims, 50)))
-    print('75th Percentile: {:.4f}'.format(np.percentile(model_sims, 75)))
+    summary(model_sims)
 
     if args.save_path is not None:
         plot_sims(model_sims, args.augmentation, args.alpha, args.save_path)

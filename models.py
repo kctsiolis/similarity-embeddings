@@ -7,8 +7,9 @@ class ResNet18(nn.Module):
     def __init__(self, num_classes=10, one_channel=False, pretrained=False):
         super().__init__()
         if pretrained:
-            assert num_classes == 1000
-        self.model = resnet18(num_classes=num_classes, pretrained=pretrained)
+            self.model = resnet18(pretrained=True)
+        else:
+            self.model = resnet18(num_classes=num_classes)
         self.dim = 512
         if one_channel:
             #Set number of input channels to 1 (since MNIST images are greyscale)
@@ -21,9 +22,12 @@ class ResNet18(nn.Module):
         return self.dim
 
 class ResNet50(nn.Module):
-    def __init__(self, num_classes=10, one_channel=False):
+    def __init__(self, num_classes=10, one_channel=False, pretrained=False):
         super().__init__()
-        self.model = resnet50(num_classes=num_classes)
+        if pretrained:
+            self.model = resnet50(pretrained=True)
+        else:
+            self.model = resnet50(num_classes=num_classes)
         self.dim = 2048
         if one_channel:
             #Set number of input channels to 1 (since MNIST images are greyscale)
