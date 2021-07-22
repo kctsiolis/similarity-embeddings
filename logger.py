@@ -35,7 +35,7 @@ class Logger:
     """
 
     def __init__(self, type: str, dataset: str, args: Namespace, 
-        verbose: bool = True):
+        save: bool = True, verbose: bool = True):
         """Instantiate logger object.
 
         Args:
@@ -45,17 +45,22 @@ class Logger:
             verbose: Whether or not to print logger info to stdout.
 
         """
-        self.dir = make_log_dir(type, dataset, args)
-        os.mkdir(self.dir)
-        self.log_path = os.path.join(self.dir, 'log.txt')
-        self.results_path = os.path.join(self.dir, 'results.txt')
-        self.model_path = os.path.join(self.dir, 'model.pt')
-        self.plots_dir = os.path.join(self.dir, 'plots')
-        os.mkdir(self.plots_dir)
-        self.log_file = open(self.log_path, 'w')
-        self.results_file = open(self.results_path, 'w')
         self.verbose = verbose
-        self.make_header(type, args)
+        if save:
+            self.dir = make_log_dir(type, dataset, args)
+            os.mkdir(self.dir)
+            self.log_path = os.path.join(self.dir, 'log.txt')
+            self.results_path = os.path.join(self.dir, 'results.txt')
+            self.model_path = os.path.join(self.dir, 'model.pt')
+            self.plots_dir = os.path.join(self.dir, 'plots')
+            os.mkdir(self.plots_dir)
+            self.log_file = open(self.log_path, 'w')
+            self.results_file = open(self.results_path, 'w')
+            self.make_header(type, args)
+        else:
+            self.log_file = None
+            self.results_file = None
+            self.model_path = None
 
     def make_header(self, type: str, args: Namespace) -> None:
         """Start the log with a header giving general experiment info.
@@ -102,7 +107,8 @@ class Logger:
             string: String to write.
 
         """
-        self.log_file.write(string + '\n')
+        if self.log_file is not None:
+            self.log_file.write(string + '\n')
         if self.verbose:
             print(string)
 
@@ -113,7 +119,8 @@ class Logger:
             string: String to write to results file.
 
         """
-        self.results_file.write(string + '\n')
+        if self.results_file is not None:
+            self.results_file.write(string + '\n')
         if self.verbose:
             print(string)
 

@@ -11,6 +11,7 @@ every pair of images in the original data.
 
 """
 
+import os
 import argparse
 from tqdm import tqdm
 import numpy as np
@@ -18,8 +19,8 @@ import torch
 from torch import nn
 from matplotlib import pyplot as plt
 from data_augmentation import augment
-from embeddings import compute_similarity_matrix, normalize_embeddings
-from training import get_model_similarity, get_embeddings, predict
+from embeddings import normalize_embeddings
+from training import get_model_similarity, get_embeddings
 from models import Embedder, ResNet18, ResNet50, ResNetSimCLR
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
@@ -36,14 +37,14 @@ def get_args(parser):
                         help='Dataset model was trained on.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'none'], default='blur-sigma',
                         help='Type of augmentation to use.') 
-    parser.add_argument('--alpha', type=float, default=1.0,
+    parser.add_argument('--alpha', type=float, default=[1.0], nargs='+',
                         help='Augmentation intensity.')
     parser.add_argument('--cosine', action='store_true',
                         help='Set this option to use cosine similarity.')
     parser.add_argument('--device', type=str, default='cpu', 
                         help='Device to use.')
-    parser.add_argument('--save-path', type=str, default=None,
-                        help='Path to save plot.')
+    parser.add_argument('--save-dir', type=str, default=None,
+                        help='Directory to save plots.')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed.')
     
@@ -51,7 +52,7 @@ def get_args(parser):
     return args
 
 def collect_sims(model: nn.Module, loader: torch.utils.data.DataLoader, 
-    augmentation: str, device: torch.device, alpha: int,
+    augmentation: str, device: torch.device, alpha: float,
     cosine: bool = True) -> list:
     """Compute the model similarities for the entire dataset.
 
@@ -100,17 +101,41 @@ def plot_sims(sims: list, augmentation: str, alpha: float,
         plt.title('Model similarities for {} with intensity {}'.format(augmentation, alpha))
     plt.savefig(save_path)
 
+def plot_mean(alphas: list, means: list, stds:list, save_path: str) -> None:
+    plt.figure()
+    plt.errorbar(alphas, means, yerr=stds)
+    plt.xlabel('Alpha')
+    plt.ylabel('Mean Similarity')
+    plt.savefig(save_path)
+
 def summary(sims):
-    print('Minimum: {:.4f}'.format(min(sims)))
-    print('Maximum: {:.4f}'.format(max(sims)))
-    print('Mean: {:.4f}'.format(np.mean(sims)))
-    print('Standard deviation: {:.4f}'.format(np.std(sims)))
-    print('1st Percentile: {:.4f}'.format(np.percentile(sims, 1)))
-    print('2.5th Percentile: {:.4f}'.format(np.percentile(sims, 2.5)))
-    print('5th Percentile: {:.4f}'.format(np.percentile(sims, 5)))
-    print('25th Percentile: {:.4f}'.format(np.percentile(sims, 25)))
-    print('Median: {:.4f}'.format(np.percentile(sims, 50)))
-    print('75th Percentile: {:.4f}'.format(np.percentile(sims, 75)))
+    min = np.min(sims)
+    print('Minimum: {:.4f}'.format(min))
+    max = np.max(sims)
+    print('Maximum: {:.4f}'.format(max))
+    mean = np.mean(sims)
+    print('Mean: {:.4f}'.format(mean))
+    std = np.std(sims)
+    print('Standard deviation: {:.4f}'.format(std))
+    p1 = np.percentile(sims, 1)
+    print('1st Percentile: {:.4f}'.format(p1))
+    p2 = np.percentile(sims, 2.5)
+    print('2.5th Percentile: {:.4f}'.format(p2))
+    p5 = np.percentile(sims, 5)
+    print('5th Percentile: {:.4f}'.format(p5))
+    p25 = np.percentile(sims, 25)
+    print('25th Percentile: {:.4f}'.format(p25))
+    p50 = np.percentile(sims, 50)
+    print('Median: {:.4f}'.format(p50))
+    p75 = np.percentile(sims, 75)
+    print('75th Percentile: {:.4f}'.format(p75))
+
+    return min, max, mean, std, p1, p2, p5, p25, p50, p75
+
+def compute_means_and_stds(model: nn.Module, loader: torch.utils.data.DataLoader,
+    augmentation: str, device: torch.device, alphas: list, cosine: bool):
+    for alpha in alphas:
+        collect_sims(model, loader, augmentation, device, alpha, cosine)
 
 def main():
     """Load the data, compute similarities, and plot them."""
@@ -171,6 +196,8 @@ def main():
         if args.cosine:
             model_embs = normalize_embeddings(model_embs)
 
+        #model_sims = np.matmul(model_embs, np.transpose(model_embs))
+
         sorted_embs = []
         c = int(np.max(labels) + 1)
 
@@ -190,18 +217,28 @@ def main():
 
         print('INTER CLASS SIMS:')
         summary(inter_class_sims)
-
-        print('OVERALL SIMS:')
-        model_sims = intra_class_sims + 2 * inter_class_sims
+        
+        model_sims = intra_class_sims + (2 * inter_class_sims)
         summary(model_sims)
+        if args.save_dir is not None:
+            save_path = os.path.join(args.save_dir, '{}_{}_original.png'.format(args.model, args.dataset))
+            plot_sims(model_sims, args.augmentation, args.alpha, save_path)
     else:
-        model_sims = collect_sims(model, valid_loader, args.augmentation,
-            device, args.alpha, args.cosine)
-
-    summary(model_sims)
-
-    if args.save_path is not None:
-        plot_sims(model_sims, args.augmentation, args.alpha, args.save_path)
+        means = []
+        stds = []
+        for a in args.alpha:
+            model_sims = collect_sims(model, valid_loader, args.augmentation,
+                device, a, args.cosine)
+            print('alpha = {}'.format(a))
+            _, _, mean, std, _, _, _, _, _, _ = summary(model_sims)
+            means.append(mean)
+            stds.append(std)
+            print('\n')
+            if args.save_dir is not None:
+                save_path = os.path.join(args.save_dir, '{}_{}_alpha={}.png'.format(args.model, args.dataset, a))
+                plot_sims(model_sims, args.augmentation, args.alpha, save_path)
+        save_path = os.path.join(args.save_dir, '{}_{}_means.png'.format(args.model, args.dataset))
+        plot_mean(args.alpha, means, stds, save_path)
 
 if __name__ == '__main__':
     main()

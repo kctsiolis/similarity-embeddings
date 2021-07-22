@@ -66,7 +66,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         torch.cuda.set_device(device)
 
     if distributed:
-        dist.init_process_group(backend='nccl', init_method='tcp://localhost:29500',
+        dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
             world_size=num_gpus, rank=idx)
         
     batch_size = int(args.batch_size / num_gpus)
@@ -82,7 +82,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         train_loader, valid_loader = imagenet_train_loader(batch_size=batch_size,
             distributed=distributed)
 
-    logger = Logger('teacher', args.dataset, args)
+    logger = Logger('teacher', args.dataset, args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 

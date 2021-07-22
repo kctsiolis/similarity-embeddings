@@ -61,9 +61,9 @@ class Embedder(nn.Module):
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
         try:
-            self.features = nn.Sequential(*list(model.children())[:-1])
-        except AttributeError:
             self.features = nn.Sequential(*list(model.model.children())[:-1])
+        except AttributeError:
+            self.features = nn.Sequential(*list(model.children())[:-1])
         except AttributeError:
             self.features = nn.Sequential(*list(model.backbone.children())[:-1])
 

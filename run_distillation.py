@@ -18,12 +18,14 @@ Datasets supported:
 
 import argparse
 import torch
+import torch.multiprocessing as mp
+import torch.distributed as dist
 import numpy as np
 import torch.nn as nn
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
-from models import ResNet18, Embedder, ConvNetEmbedder
+from models import ResNet18, ResNet50, Embedder, ConvNetEmbedder
 from training import train_distillation
 from logger import Logger
 
@@ -41,26 +43,83 @@ def get_args(parser):
                         help='Choice of optimizer for training.')
     parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='plateau',
                         help='Choice of scheduler for training.')
-    parser.add_argument('--patience', type=int,
+    parser.add_argument('--patience', type=int, default=5,
                         help='Patience used in the Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--early-stop', type=int, default=5, metavar='E',
+    parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--load-path', type=str,
                         help='Path to the teacher model.')
-    parser.add_argument('--device', type=str, default="cpu",
+    parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18'],
-                        help='Choice of model.')
+    parser.add_argument('--teacher_model', type=str, default='resnet50_pretrained', choices=['resnet18', 'resnet50_pretrained'],
+                        help='Choice of student model.')
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'cnn'],
+                        help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
 
     args = parser.parse_args()
 
     return args
+
+def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
+    device = torch.device(args.device[idx])
+    if device.type == 'cuda':
+        torch.cuda.set_device(device)
+
+    if distributed:
+        dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
+            world_size=num_gpus, rank=idx)
+        
+    batch_size = int(args.batch_size / num_gpus)
+
+    #Get the data
+    if args.dataset == 'mnist':
+        train_loader, valid_loader = mnist_train_loader(batch_size=batch_size,
+            device=device, distributed=distributed)
+    elif args.dataset == 'cifar':
+        train_loader, valid_loader = cifar_train_loader(batch_size=batch_size,
+            device=device, distributed=distributed, augs=args.augs)
+    else:
+        train_loader, valid_loader = imagenet_train_loader(batch_size=batch_size,
+            distributed=distributed)
+
+    logger = Logger('distillation', args.dataset, args, save=(idx == 0))
+    one_channel = args.dataset == 'mnist'
+    num_classes = 1000 if args.dataset == 'imagenet' else 10
+
+    if args.teacher_model == 'resnet50_pretrained':
+        teacher = ResNet50(num_classes=num_classes, pretrained=True)
+    else:
+        teacher = ResNet18(one_channel=one_channel, num_classes=num_classes)
+        teacher.model.load_state_dict(torch.load(args.load_path))
+
+    #We only care about the teacher's embeddings
+    teacher = Embedder(teacher)
+
+    if args.model == 'resnet50':
+        student = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes))
+    elif args.model == 'resnet18':
+        student = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
+    else:
+        student = ConvNetEmbedder(one_channel=one_channel)
+
+    student.to(device)
+    teacher.to(device)
+
+    if distributed:
+        student = torch.nn.parallel.DistributedDataParallel(student, device_ids=[device])
+        teacher = torch.nn.parallel.DistributedDataParallel(teacher, device_ids=[device])
+
+    train_distillation(student, teacher, train_loader, valid_loader, device=device, 
+        loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
+        scheduler_choice=args.scheduler, patience=args.patience, early_stop=args.early_stop, 
+        log_interval=args.log_interval, logger=logger, cosine=args.cosine, rank=idx,
+        num_devices=num_gpus)
 
 def main():
     """Load arguments, the dataset, and initiate the training loop."""
@@ -75,36 +134,13 @@ def main():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
 
-    device = torch.device(args.device)
+    num_gpus = len(args.device)
 
-    #Get the data
-    if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size,
-            device=device)
-    elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
-            device=device)
+    #If we are doing distributed computation over multiple GPUs
+    if num_gpus > 1:
+        mp.spawn(main_worker, nprocs=num_gpus, args=(num_gpus, True, args))
     else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
-
-    logger = Logger('distillation', args.dataset, args)
-    one_channel = args.dataset == 'mnist'
-    num_classes = 1000 if args.dataset == 'imagenet' else 10
-
-    teacher = ResNet18(one_channel=one_channel)
-    if args.model == 'resnet18':
-        student = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
-    else:
-        student = ConvNetEmbedder(one_channel=one_channel)
-
-    teacher.model.load_state_dict(torch.load(args.load_path))
-    #We only care about the teacher's embeddings
-    teacher = Embedder(teacher)
-
-    train_distillation(student, teacher, train_loader, valid_loader, device=device, 
-        loss_function=nn.MSELoss(), epochs=args.epochs, lr=args.lr, optimizer_choice=args.optimizer,
-        scheduler_choice=args.scheduler, patience=args.patience, early_stop=args.early_stop, 
-        log_interval=args.log_interval, logger=logger, cosine=args.cosine)
+        main_worker(0, 1, False, args)
 
 if __name__ == '__main__':
     main()

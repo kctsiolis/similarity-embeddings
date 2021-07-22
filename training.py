@@ -58,8 +58,6 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
         ValueError: Only Plateau and Cosine schedulers are supported.
     
     """
-    save_path = logger.get_model_path()
-
     if optimizer_choice == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=lr)
     elif optimizer_choice == 'sgd':
@@ -88,11 +86,11 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
     for epoch in range(1, epochs + 1):
         train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, 
             log_interval, logger, rank, num_devices)
-        train_loss, train_acc = predict(model, device, train_loader, loss_function, logger, "Train")
+        #train_loss, train_acc = predict(model, device, train_loader, loss_function, logger, "Train")
         val_loss, val_acc = predict(model, device, valid_loader, loss_function, logger, "Validation")
 
-        train_losses.append(train_loss)
-        train_accs.append(train_acc)
+        #train_losses.append(train_loss)
+        #train_accs.append(train_acc)
         val_losses.append(val_loss)
         val_accs.append(val_acc)
 
@@ -105,10 +103,11 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
             epochs_until_stop = early_stop
 
             #Save the current model (as it is the best one so far)
-            if rank == 0 and save_path is not None:
-                logger.log("Saving model...")
-                torch.save(model.state_dict(), save_path)
-                logger.log("Model saved.\n")
+            if rank == 0:
+                if logger.get_model_path() is not None:
+                    logger.log("Saving model...")
+                    torch.save(model.state_dict(), logger.get_model_path())
+                    logger.log("Model saved.\n")
 
         if scheduler_choice == 'plateau':
             scheduler.step(val_loss)
@@ -119,8 +118,8 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
         else:
             scheduler.step()
             
-
-    train_report(train_losses, val_losses, train_accs, val_accs, change_epochs=change_epochs, logger=logger)
+    if rank == 0:
+        train_report(train_losses, val_losses, train_accs, val_accs, change_epochs=change_epochs, logger=logger)
 
     return train_losses, train_accs, val_losses, val_accs
 
@@ -131,8 +130,8 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
     lr: float = 0.1, optimizer_choice: str = 'adam', 
     scheduler_choice: str = 'plateau', patience: int = 5, 
     early_stop: int = 10, log_interval: int = 10, 
-    logger: Logger = None, cosine: bool = False
-    ) -> tuple([list([float]), list([float])]):
+    logger: Logger = None, cosine: bool = False,
+    rank: int = 0, num_devices: int = 1) -> tuple([list([float]), list([float])]):
     """Distillation training loop.
 
     Args:
@@ -151,6 +150,8 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
         log_interval: Number of batches between logs.
         logger: Logger object which tracks live training information.
         cosine: Set to true to match cosine similarities, otherwise match dot products.
+        rank: Rank of the current process (useful for multiprocessing).
+        num_devices: Number of devices.
 
     Returns:
         List of training losses, list of validation losses (one entry
@@ -190,13 +191,13 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
 
     for epoch in range(1, epochs + 1):
         train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
-            optimizer, epoch, log_interval, logger, cosine)
-        train_loss = compute_distillation_loss(student, teacher, device, train_loader, 
-            loss_function, cosine, logger, "Training")
+            optimizer, epoch, log_interval, logger, cosine, rank, num_devices)
+        #train_loss = compute_distillation_loss(student, teacher, device, train_loader, 
+            #loss_function, cosine, logger, "Training")
         val_loss = compute_distillation_loss(student, teacher, device, valid_loader, 
             loss_function, cosine, logger, "Validation")
 
-        train_losses.append(train_loss)
+        #train_losses.append(train_loss)
         val_losses.append(val_loss)
 
         #Check if validation loss is worsening
@@ -208,10 +209,11 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
             epochs_until_stop = early_stop
 
             #Save the current model (as it is the best one so far)
-            if save_path is not None:
-                logger.log("Saving model...")
-                torch.save(student.state_dict(), save_path)
-                logger.log("Model saved.\n")
+            if rank == 0:
+                if save_path is not None:
+                    logger.log("Saving model...")
+                    torch.save(student.state_dict(), save_path)
+                    logger.log("Model saved.\n")
 
         scheduler.step(val_loss)
 
@@ -221,7 +223,8 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
                 lr = plateau_factor * lr
                 logger.log("Learning rate decreasing to {}\n".format(lr))
 
-    train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
+    if rank == 0:
+        train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 
     return train_losses, val_losses
 
@@ -349,26 +352,24 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
     
     """
     model.train()
-    running_loss = AverageMeter('Training Loss', ':.6f')
-    progress = ProgressMeter(len(train_loader),
-        [running_loss],
-        prefix='Epoch: {}'.format(epoch))
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
         loss = loss_function(output, target)
-        running_loss.update(loss.item(), data.size(0))
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
-            log_str = progress.display(batch_idx)
+            log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
+                epoch, batch_idx * len(data), int(len(train_loader.dataset) / num_devices),
+                100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
 
 def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
     device: torch.device, train_loader: torch.utils.data.DataLoader, 
     loss_function: nn.Module, optimizer: optim.Optimizer, epoch: int, 
-    log_interval: int, logger: Logger, cosine: bool) -> None:
+    log_interval: int, logger: Logger, cosine: bool,
+    rank: int, num_devices: int) -> None:
     """Train the student for one epoch.
 
     Args:
@@ -382,6 +383,8 @@ def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
         log_interval: Number of batches between logs.
         logger: Logger object which tracks live training information.
         cosine: Set to true to match cosine similarities, otherwise match dot products.
+        rank: Rank of the current device.
+        num_devices: Number of devices used for training.
 
     """
     student.train()
@@ -395,7 +398,7 @@ def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
         optimizer.step()
         if batch_idx % log_interval == 0:
             log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
+                epoch, batch_idx * len(data), int(len(train_loader.dataset) / num_devices),
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
 
@@ -745,42 +748,3 @@ def train_plots(train_vals: list([float]), val_vals: list([float]),
     plt.xlabel('Epoch')
     plt.ylabel(y_label)
     plt.savefig(save_dir + '/' + y_label + '_plots')
-
-class AverageMeter():
-    """Computes and stores the average and current value"""
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
-class ProgressMeter():
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        return '\t'.join(entries)
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
