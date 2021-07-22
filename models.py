@@ -57,7 +57,7 @@ class ResNet152(nn.Module):
 
 #Model without linear classification layer
 class Embedder(nn.Module):
-    def __init__(self, model, dim=None, batchnorm=False):
+    def __init__(self, model, dim=None, batchnormalize=False):
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
@@ -77,14 +77,14 @@ class Embedder(nn.Module):
                 self.dim = dim
 
         #Whether or not to batch norm the features at the end
-        self.batchnorm = batchnorm
-        if batchnorm:
+        self.batchnormalize = batchnormalize
+        if batchnormalize:
             self.final_normalization = nn.BatchNorm1d(self.dim, affine=False)
                 
     def forward(self, x):
         x = self.features(x)
         x = torch.flatten(x, 1)
-        if self.batchnorm:
+        if self.batchnormalize:
             x = self.final_normalization(x) #Normalize the output
         return x
 
@@ -156,3 +156,72 @@ class ResNetSimCLR(nn.Module):
 
     def forward(self, x):
         return self.backbone(x)
+
+def get_model(model_str: str, load: bool = False, load_path: str = None, 
+    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, 
+    batchnormalize: bool = False):
+    if load and load_path is None:
+        raise ValueError('Must specify path to load model from.')
+
+    if model_str == 'resnet18':
+        model = ResNet18(one_channel=one_channel, num_classes=num_classes)
+        if load:
+            model.model.load_state_dict(torch.load(load_path))
+        if get_embedder:
+            model = Embedder(model)
+    elif model_str == 'resnet50':
+        model = ResNet50(one_channel=one_channel, num_classes=num_classes)
+        if load:
+            model.model.load_state_dict(torch.load(load_path))
+        if get_embedder:
+            model = Embedder(model)
+    elif model_str == 'resnet152':
+        model = ResNet152(one_channel=one_channel, num_classes=num_classes)
+        if load:
+            model.model.load_state_dict(torch.load(load_path))
+        if get_embedder:
+            model = Embedder(model)
+    elif model_str == 'resnet18_embedder':
+        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes), 
+            batchnormalize=batchnormalize)
+        if load:
+            model.load_state_dict(torch.load(load_path))
+    elif model_str == 'resnet50_embedder':
+        model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes), 
+            batchnormalize=batchnormalize)
+        if load:
+            model.load_state_dict(torch.load(load_path))
+    elif model_str == 'convnet_embedder':
+        model = ConvNetEmbedder(one_channel=one_channel)
+        if load:
+            model.load_state_dict(torch.load(load_path))
+    elif model_str == 'resnet18_pretrained':
+        model = ResNet18(one_channel=one_channel, pretrained=True)
+        if get_embedder:
+            model = Embedder(model)
+    elif model_str == 'resnet50_pretrained':
+        model = ResNet50(one_channel=one_channel, pretrained=True)
+        if get_embedder:
+            model = Embedder(model)
+    elif model_str == 'simclr_pretrained':
+        assert load == True
+        checkpoint = torch.load(load_path)
+        model = ResNet50(num_classes=1000)
+        model.model.load_state_dict(checkpoint['state_dict'])
+        if get_embedder:
+            model = Embedder(model, batchnormalize=batchnormalize)
+    elif model_str == 'simclr_pretrained_cifar':
+        model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
+        model = Embedder(model, dim=64, batchnormalize=batchnormalize)
+    elif model_str == 'simclr':
+        assert load == True
+        checkpoint = torch.load(load_path)
+        model = ResNetSimCLR(base_model='resnet18', out_dim=128)
+        model.load_state_dict(checkpoint['state_dict'])
+        if get_embedder:
+            model = Embedder(model, dim=128, batchnormalize=batchnormalize)
+    else:
+        raise ValueError('Model {} not defined.'.format(model_str))
+
+    return model
+

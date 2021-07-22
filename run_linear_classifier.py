@@ -18,7 +18,7 @@ import argparse
 import torch
 import numpy as np
 from torch import nn
-from models import Classifier, Embedder, ResNet18, ResNet50, ConvNetEmbedder
+from models import get_model, Classifier
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
@@ -90,18 +90,8 @@ def main():
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
-    if args.model == 'cnn':
-        embedder = ConvNetEmbedder(one_channel=one_channel)
-        embedder.load_state_dict(torch.load(args.load_path))
-    elif args.model == 'resnet18':
-        embedder = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
-        embedder.load_state_dict(torch.load(args.load_path))
-    else:
-        checkpoint = torch.load(args.load_path)
-        embedder = ResNet50(num_classes=1000)
-        embedder.model.load_state_dict(checkpoint['state_dict'])
-        embedder = Embedder(embedder)
-        
+    embedder = get_model(args.model, load=True, load_path=args.load_path,
+        one_channel=one_channel, num_classes=num_classes, get_embedder=True)     
     model = Classifier(embedder)
     model.to(device)
 

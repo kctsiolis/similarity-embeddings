@@ -25,7 +25,7 @@ from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
 from training import train_similarity
-from models import ResNet18, Embedder
+from models import get_model
 from logger import Logger
 
 def get_args(parser):
@@ -102,10 +102,11 @@ def main():
 
     if args.loss == 'mse':
         loss_function = nn.MSELoss()
-        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
+        model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
     else:
         loss_function = nn.KLDivLoss(reduction='batchmean')
-        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes), batchnorm=True)
+        model = get_model(args.model, one_channel=one_channel, num_classes=num_classes, 
+            batchnormalize=True)
 
     train_similarity(model, train_loader, valid_loader, device=device, 
         augmentation=args.augmentation, alpha_max=args.alpha_max, 

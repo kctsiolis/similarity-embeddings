@@ -19,7 +19,7 @@ from torch import nn
 import torch.multiprocessing as mp
 import torch.distributed as dist
 import numpy as np
-from models import ResNet18, ResNet50, ResNet152
+from models import get_model
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
@@ -86,13 +86,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
-    if args.model == 'resnet18':
-        model = ResNet18(one_channel=one_channel, num_classes=num_classes)
-    elif args.model == 'resnet50':
-        model = ResNet50(one_channel=one_channel, num_classes=num_classes) 
-    else:
-        model = ResNet152(one_channel=one_channel, num_classes=num_classes)
-
+    model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
     model.to(device)
 
     if distributed:

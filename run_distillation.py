@@ -25,7 +25,7 @@ import torch.nn as nn
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
-from models import ResNet18, ResNet50, Embedder, ConvNetEmbedder
+from models import get_model
 from training import train_distillation
 from logger import Logger
 
@@ -93,26 +93,9 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
-    if args.teacher_model == 'resnet50_pretrained':
-        teacher = ResNet50(num_classes=1000, pretrained=True)
-    elif args.teacher_model == 'simclr_pretrained':
-        checkpoint = torch.load(args.load_path)
-        teacher = ResNet50(num_classes=1000)
-        teacher.model.load_state_dict(checkpoint['state_dict'])
-    else:
-        teacher = ResNet18(one_channel=one_channel, num_classes=num_classes)
-        teacher.model.load_state_dict(torch.load(args.load_path))
-
-    #We only care about the teacher's embeddings
-    teacher = Embedder(teacher)
-
-    if args.model == 'resnet50':
-        student = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes))
-    elif args.model == 'resnet18':
-        student = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
-    else:
-        student = ConvNetEmbedder(one_channel=one_channel)
-
+    teacher = get_model(args.teacher_model, load=True, load_path=args.load_path, 
+        one_channel=one_channel, num_classes=num_classes, get_embedder=True)
+    student = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
     student.to(device)
     teacher.to(device)
 

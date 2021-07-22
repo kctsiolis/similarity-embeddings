@@ -21,7 +21,7 @@ from matplotlib import pyplot as plt
 from data_augmentation import augment
 from embeddings import normalize_embeddings
 from training import get_model_similarity, get_embeddings
-from models import Embedder, ResNet18, ResNet50, ResNetSimCLR
+from models import get_model
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
@@ -30,7 +30,7 @@ def get_args(parser):
     parser.add_argument('--load-path', type=str,
                         help='Path to the model.')   
     parser.add_argument('--model', type=str, choices=['resnet18_classifier', 'resnet18_pretrained',
-                        'resnet18_embedder', 'resnet50_pretrained', 'simclr', 'simclr_pretrained'], 
+                        'resnet18_embedder', 'resnet50_pretrained_cifar', 'simclr', 'simclr_pretrained'], 
                         default='resnet18',
                         help='Type of model being evaluated.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'], default='cifar',
@@ -39,7 +39,7 @@ def get_args(parser):
                         help='Type of augmentation to use.') 
     parser.add_argument('--alpha', type=float, default=[1.0], nargs='+',
                         help='Augmentation intensity.')
-    parser.add_argument('--batchnorm', action='store_true',
+    parser.add_argument('--batchnormalize', action='store_true',
                         help='Set this option to use batch normalization to normalize the features.')
     parser.add_argument('--cosine', action='store_true',
                         help='Set this option to use cosine similarity.')
@@ -164,33 +164,10 @@ def main():
         one_channel = False
         _, valid_loader = imagenet_train_loader(64)
 
-    if args.model == 'resnet18_classifier':
-        model = ResNet18(one_channel=one_channel)
-        try:
-            model.load_state_dict(torch.load(args.load_path))
-        except RuntimeError:
-            model.model.load_state_dict(torch.load(args.load_path))
-        model = Embedder(model, batchnorm=args.batchnorm)
-    elif args.model == 'resnet18_pretrained':
-        model = ResNet18(num_classes=1000, pretrained=True)
-        model = Embedder(model, batchnorm=args.batchnorm)
-    elif args.model == 'resnet18_embedder':
-        model = Embedder(ResNet18())
-        model.load_state_dict(torch.load(args.load_path))
-    elif args.model == 'resnet50_pretrained':
-        model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        model = Embedder(model, dim=64, batchnorm=args.batchnorm)
-    elif args.model == 'simclr':
-        checkpoint = torch.load(args.load_path)
-        model = ResNetSimCLR(base_model='resnet18', out_dim=128)
-        model.load_state_dict(checkpoint['state_dict'])
-        model = Embedder(model, dim=128, batchnorm=args.batchnorm)
-    else:
-        checkpoint = torch.load(args.load_path)
-        model = ResNet50(num_classes=1000)
-        model.model.load_state_dict(checkpoint['state_dict'])
-        model = Embedder(model, batchnorm=args.batchnorm)
+    num_classes = 1000 if args.dataset == 'imagenet' else 10
 
+    model = get_model(args.model, one_channel=one_channel, num_classes=num_classes,
+        get_embedder=True, batchnormalize=args.batchnormalize)
     model = model.to(device)
 
     if args.augmentation == 'none':

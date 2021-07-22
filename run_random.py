@@ -14,7 +14,7 @@ import argparse
 import torch
 import numpy as np
 from torch import nn
-from models import ResNet18, Embedder, Classifier
+from models import get_model, Classifier
 from mnist import mnist_train_loader
 from cifar import cifar_train_loader
 from imagenet import imagenet_train_loader
@@ -47,7 +47,7 @@ def get_args(parser):
                         help='how many batches to wait before logging training status')
     parser.add_argument('--device', type=str, default="cpu",
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50'],
+    parser.add_argument('--model', type=str, default='resnet18_embedder', choices=['resnet18_embedder', 'resnet50_embedder'],
                         help='Choice of model.')
     args = parser.parse_args()
 
@@ -83,7 +83,7 @@ def main():
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
     #Randomly initialized ResNet18 with frozen embedder, learnable linear layer
-    model = Classifier(Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes)))
+    model = Classifier(get_model(args.model, one_channel=one_channel, num_classes=num_classes))
 
     #Train the model
     train_sup(model, train_loader, valid_loader, device=device,
