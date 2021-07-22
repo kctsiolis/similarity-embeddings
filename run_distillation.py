@@ -55,7 +55,8 @@ def get_args(parser):
                         help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--teacher_model', type=str, default='resnet50_pretrained', choices=['resnet18', 'resnet50_pretrained'],
+    parser.add_argument('--teacher_model', type=str, default='resnet18', 
+                        choices=['resnet18', 'resnet50_pretrained', 'simclr_pretrained'],
                         help='Choice of student model.')
     parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'cnn'],
                         help='Choice of student model.')
@@ -93,7 +94,11 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
     if args.teacher_model == 'resnet50_pretrained':
-        teacher = ResNet50(num_classes=num_classes, pretrained=True)
+        teacher = ResNet50(num_classes=1000, pretrained=True)
+    elif args.teacher_model == 'simclr_pretrained':
+        checkpoint = torch.load(args.load_path)
+        teacher = ResNet50(num_classes=1000)
+        teacher.model.load_state_dict(checkpoint['state_dict'])
     else:
         teacher = ResNet18(one_channel=one_channel, num_classes=num_classes)
         teacher.model.load_state_dict(torch.load(args.load_path))

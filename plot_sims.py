@@ -39,6 +39,8 @@ def get_args(parser):
                         help='Type of augmentation to use.') 
     parser.add_argument('--alpha', type=float, default=[1.0], nargs='+',
                         help='Augmentation intensity.')
+    parser.add_argument('--batchnorm', action='store_true',
+                        help='Set this option to use batch normalization to normalize the features.')
     parser.add_argument('--cosine', action='store_true',
                         help='Set this option to use cosine similarity.')
     parser.add_argument('--device', type=str, default='cpu', 
@@ -168,26 +170,26 @@ def main():
             model.load_state_dict(torch.load(args.load_path))
         except RuntimeError:
             model.model.load_state_dict(torch.load(args.load_path))
-        model = Embedder(model)
+        model = Embedder(model, batchnorm=args.batchnorm)
     elif args.model == 'resnet18_pretrained':
         model = ResNet18(num_classes=1000, pretrained=True)
-        model = Embedder(model)
+        model = Embedder(model, batchnorm=args.batchnorm)
     elif args.model == 'resnet18_embedder':
         model = Embedder(ResNet18())
         model.load_state_dict(torch.load(args.load_path))
     elif args.model == 'resnet50_pretrained':
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        model = Embedder(model, dim=64)
+        model = Embedder(model, dim=64, batchnorm=args.batchnorm)
     elif args.model == 'simclr':
         checkpoint = torch.load(args.load_path)
         model = ResNetSimCLR(base_model='resnet18', out_dim=128)
         model.load_state_dict(checkpoint['state_dict'])
-        model = Embedder(model, dim=128)
+        model = Embedder(model, dim=128, batchnorm=args.batchnorm)
     else:
         checkpoint = torch.load(args.load_path)
         model = ResNet50(num_classes=1000)
         model.model.load_state_dict(checkpoint['state_dict'])
-        model = Embedder(model)
+        model = Embedder(model, batchnorm=args.batchnorm)
 
     model = model.to(device)
 

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch._C import autocast_decrement_nesting
 import torch.nn.functional as F
 from torchvision.models import resnet18, resnet50, resnet152
 
@@ -56,7 +57,7 @@ class ResNet152(nn.Module):
 
 #Model without linear classification layer
 class Embedder(nn.Module):
-    def __init__(self, model, dim=None):
+    def __init__(self, model, dim=None, batchnorm=False):
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
@@ -70,27 +71,21 @@ class Embedder(nn.Module):
         try:
             self.dim = model.dim
         except AttributeError:
-            self.dim = dim
+            if dim is None:
+                raise ValueError('Must specify the model embedding dimension.')
+            else:
+                self.dim = dim
+
+        #Whether or not to batch norm the features at the end
+        self.batchnorm = batchnorm
+        if batchnorm:
+            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False)
                 
     def forward(self, x):
         x = self.features(x)
         x = torch.flatten(x, 1)
-        return x
-
-    def get_dim(self):
-        return self.dim
-
-#Model which applies additional batch normalization to learned features
-class NormalizedEmbedder(Embedder):
-    def __init__(self, model):
-        super().__init__(model)
-        self.dim = model.dim
-        self.final_normalization = nn.BatchNorm1d(512, affine=False)
-    
-    def forward(self, x):
-        x = self.features(x)
-        x = torch.flatten(x, 1)
-        x = self.final_normalization(x) #Normalize the output
+        if self.batchnorm:
+            x = self.final_normalization(x) #Normalize the output
         return x
 
     def get_dim(self):

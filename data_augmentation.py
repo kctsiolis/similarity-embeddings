@@ -80,8 +80,25 @@ def gaussian_blur_kernel(data: torch.Tensor, device: torch.device,
 
     return data, sim_prob
 
+def color_jitter(data: torch.Tensor, s_max: float, 
+    beta: float, device = torch.device, random: bool = True
+    ) -> tuple([torch.Tensor, torch.Tensor]):
+    if s_max < 0:
+        raise ValueError("Maximum augmentation strength should be non-negative.")
+    if random:
+        s = (torch.rand(data.shape[0])*s_max).to(device)
+    else:
+        s = (torch.ones(data.shape[0])*s_max).to(device)
+
+    for i, image in enumerate(data):
+        data[i,:,:,:] = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)(image)
+
+    sim_prob = torch.exp(-beta * s)
+
+    return data, sim_prob
+
 def augment(data: torch.Tensor, augmentation: str, device: torch.device, 
-    alpha_max: float = 15.0, beta: float = 0.2, random: bool = True
+    alpha_max: float, beta: float, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
     """Perform data augmentation on input.
 
@@ -106,5 +123,7 @@ def augment(data: torch.Tensor, augmentation: str, device: torch.device,
         return gaussian_blur_sigma(augmented_data, alpha_max, beta, device, random)
     elif augmentation == 'blur-kernel':
         return gaussian_blur_kernel(augmented_data, device)
+    elif augmentation == 'color-jitter':
+        return color_jitter(augmented_data, alpha_max, beta, device, random)
     else:
         raise NotImplementedError
