@@ -33,6 +33,8 @@ def get_args(parser):
                         'resnet18_embedder', 'resnet50_pretrained_cifar', 'simclr', 'simclr_pretrained'], 
                         default='resnet18',
                         help='Type of model being evaluated.')
+    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+                        help='Batch size (default: 64)')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'], default='cifar',
                         help='Dataset model was trained on.')
     parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'none'], default='blur-sigma',
@@ -156,18 +158,19 @@ def main():
     #Get the data
     if args.dataset == 'mnist':
         one_channel = True
-        _, valid_loader = mnist_train_loader(64, device=device)
+        _, valid_loader = mnist_train_loader(batch_size=args.batch_size, device=device)
     elif args.dataset == 'cifar':
         one_channel = False
-        _, valid_loader = cifar_train_loader(64, device=device)
+        _, valid_loader = cifar_train_loader(batch_size=args.batch_size, device=device)
     else:
         one_channel = False
-        _, valid_loader = imagenet_train_loader(64)
+        _, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
 
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
     model = get_model(args.model, one_channel=one_channel, num_classes=num_classes,
-        get_embedder=True, batchnormalize=args.batchnormalize)
+        get_embedder=True, batchnormalize=args.batchnormalize,
+        track_running_stats=False)
     model = model.to(device)
 
     if args.augmentation == 'none':
@@ -215,7 +218,7 @@ def main():
             print('\n')
             if args.save_dir is not None:
                 save_path = os.path.join(args.save_dir, '{}_{}_alpha={}.png'.format(args.model, args.dataset, a))
-                plot_sims(model_sims, args.augmentation, args.alpha, save_path)
+                plot_sims(model_sims, args.augmentation, a, save_path)
         save_path = os.path.join(args.save_dir, '{}_{}_means.png'.format(args.model, args.dataset))
         plot_mean(args.alpha, means, stds, save_path)
 

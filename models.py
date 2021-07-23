@@ -57,7 +57,8 @@ class ResNet152(nn.Module):
 
 #Model without linear classification layer
 class Embedder(nn.Module):
-    def __init__(self, model, dim=None, batchnormalize=False):
+    def __init__(self, model, dim=None, batchnormalize=False,
+        track_running_stats=True):
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
@@ -79,7 +80,8 @@ class Embedder(nn.Module):
         #Whether or not to batch norm the features at the end
         self.batchnormalize = batchnormalize
         if batchnormalize:
-            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False)
+            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False,
+                track_running_stats=track_running_stats)
                 
     def forward(self, x):
         x = self.features(x)
