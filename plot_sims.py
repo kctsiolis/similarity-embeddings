@@ -22,9 +22,7 @@ from data_augmentation import augment
 from embeddings import normalize_embeddings
 from training import get_model_similarity, get_embeddings
 from models import get_model
-from mnist import mnist_train_loader
-from cifar import cifar_train_loader
-from imagenet import imagenet_train_loader
+from loaders import dataset_loader
 
 def get_args(parser):
     parser.add_argument('--load-path', type=str,
@@ -158,16 +156,10 @@ def main():
     device = torch.device(args.device)
 
     #Get the data
-    if args.dataset == 'mnist':
-        one_channel = True
-        _, valid_loader = mnist_train_loader(batch_size=args.batch_size, device=device)
-    elif args.dataset == 'cifar':
-        one_channel = False
-        _, valid_loader = cifar_train_loader(batch_size=args.batch_size, device=device)
-    else:
-        one_channel = False
-        _, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
+    _, valid_loader = dataset_loader(args.dataset, args.batch_size,
+        device)
 
+    one_channel = True if args.dataset == 'mnist' else False
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
     if args.classifier:

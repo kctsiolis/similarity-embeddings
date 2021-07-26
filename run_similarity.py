@@ -21,9 +21,7 @@ import argparse
 import torch
 import numpy as np
 from torch import nn
-from mnist import mnist_train_loader
-from cifar import cifar_train_loader
-from imagenet import imagenet_train_loader
+from loaders import dataset_loader
 from training import train_similarity
 from models import get_model
 from logger import Logger
@@ -87,14 +85,8 @@ def main():
     device = torch.device(args.device)
 
     #Get the data and initialize the model
-    if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size, 
-            device=device)
-    elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
-            device=device)
-    else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
+    train_loader, valid_loader = dataset_loader(args.dataset,
+        args.batch_size, device)
 
     logger = Logger('similarity', args.dataset, args)
     one_channel = args.dataset == 'mnist'

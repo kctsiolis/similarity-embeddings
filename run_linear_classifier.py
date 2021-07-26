@@ -21,9 +21,7 @@ from torch import nn
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from models import get_model, Classifier
-from mnist import mnist_train_loader
-from cifar import cifar_train_loader
-from imagenet import imagenet_train_loader
+from loaders import dataset_loader
 from training import train_sup
 from logger import Logger
 
@@ -72,15 +70,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     batch_size = int(args.batch_size / num_gpus)
 
     #Get the data
-    if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(batch_size=batch_size,
-            device=device, distributed=distributed)
-    elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(batch_size=batch_size,
-            device=device, distributed=distributed, augs=args.augs)
-    else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=batch_size,
-            distributed=distributed)
+    train_loader, valid_loader = dataset_loader(args.dataset,
+        batch_size, device, distributed)
 
     logger = Logger('linear_classifier', args.dataset, args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'

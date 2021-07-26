@@ -22,9 +22,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 import numpy as np
 import torch.nn as nn
-from mnist import mnist_train_loader
-from cifar import cifar_train_loader
-from imagenet import imagenet_train_loader
+from loaders import dataset_loader
 from models import get_model
 from training import train_distillation
 from logger import Logger
@@ -79,15 +77,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     batch_size = int(args.batch_size / num_gpus)
 
     #Get the data
-    if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(batch_size=batch_size,
-            device=device, distributed=distributed)
-    elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(batch_size=batch_size,
-            device=device, distributed=distributed, augs=args.augs)
-    else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=batch_size,
-            distributed=distributed)
+    train_loader, valid_loader = dataset_loader(args.dataset,
+        batch_size, device, distributed)
 
     logger = Logger('distillation', args.dataset, args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'
