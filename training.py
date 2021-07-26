@@ -58,6 +58,8 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
         ValueError: Only Plateau and Cosine schedulers are supported.
     
     """
+    save_path = logger.get_model_path()
+
     if optimizer_choice == 'adam':
         optimizer = optim.Adam(model.parameters(), lr=lr)
     elif optimizer_choice == 'sgd':
@@ -106,7 +108,10 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
             if rank == 0:
                 if logger.get_model_path() is not None:
                     logger.log("Saving model...")
-                    torch.save(model.state_dict(), logger.get_model_path())
+                    if num_devices > 1:
+                        torch.save(model.module.state_dict(), save_path)
+                    else:
+                        torch.save(model.state_dict(), save_path)
                     logger.log("Model saved.\n")
 
         if scheduler_choice == 'plateau':
@@ -212,7 +217,10 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
             if rank == 0:
                 if save_path is not None:
                     logger.log("Saving model...")
-                    torch.save(student.state_dict(), save_path)
+                    if num_devices > 1:
+                        torch.save(student.module.state_dict(), save_path)
+                    else:
+                        torch.save(student.state_dict(), save_path)
                     logger.log("Model saved.\n")
 
         scheduler.step(val_loss)

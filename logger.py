@@ -34,7 +34,7 @@ class Logger:
 
     """
 
-    def __init__(self, type: str, dataset: str, args: Namespace, 
+    def __init__(self, type, dataset: str, args: Namespace, 
         save: bool = True, verbose: bool = True):
         """Instantiate logger object.
 

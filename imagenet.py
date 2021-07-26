@@ -14,6 +14,7 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torchvision import transforms
+import torchvision.datasets as datasets
 import yaml
 
 try:
@@ -22,10 +23,60 @@ except FileNotFoundError:
     config = open('config.yaml', 'r')
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 h5_path = parsed_config['imagenet_path']
+data_path = parsed_config['imagenet_path']
 
-# classes : https://gist.github.com/aaronpolhamus/964a4411c0906315deb9f4a3723aac57
+"""
+def imagenet_train_loader(batch_size, workers=10):
+    valdir = os.path.join(data_path, 'val')
 
-def imagenet_train_loader(batch_size, classes=[], shuffle=True,
+    # NOTICE, the original model do not have normalization
+    val_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(256),
+            transforms.ToTensor(),
+        ])),
+        batch_size=batch_size, shuffle=False,
+        num_workers=workers, pin_memory=True)
+
+    return val_loader
+"""
+
+def imagenet_train_loader(batch_size, workers=10, distributed=False):
+    traindir = os.path.join(data_path, 'train')
+    valdir = os.path.join(data_path, 'val')
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+
+    train_dataset = datasets.ImageFolder(
+        traindir,
+        transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+        ]))
+
+    if distributed:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+    else:
+        train_sampler = None
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=(train_sampler is None),
+        num_workers=workers, pin_memory=True, sampler=train_sampler)
+
+    val_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+        ])),
+        batch_size=batch_size, shuffle=False,
+        num_workers=workers, pin_memory=True)
+
+    return train_loader, val_loader
+
+def imagenet_old_loader(batch_size, classes=[], shuffle=True,
                         workers=10, distributed=False):
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],

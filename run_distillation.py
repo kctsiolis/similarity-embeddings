@@ -55,7 +55,7 @@ def get_args(parser):
                         help='Path to the teacher model.')
     parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--teacher_model', type=str, default='resnet18', 
+    parser.add_argument('--teacher-model', type=str, default='resnet18', 
                         choices=['resnet18', 'resnet50_pretrained', 'simclr_pretrained'],
                         help='Choice of student model.')
     parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'cnn'],

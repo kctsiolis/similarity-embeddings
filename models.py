@@ -1,8 +1,8 @@
 import torch
 from torch import nn
-from torch._C import autocast_decrement_nesting
 import torch.nn.functional as F
 from torchvision.models import resnet18, resnet50, resnet152
+from collections import OrderedDict
 
 class ResNet18(nn.Module):
     def __init__(self, num_classes=10, one_channel=False, pretrained=False):
@@ -161,10 +161,7 @@ class ResNetSimCLR(nn.Module):
 
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
     one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, 
-    batchnormalize: bool = False):
-    if load and load_path is None:
-        raise ValueError('Must specify path to load model from.')
-
+    batchnormalize: bool = False, track_running_stats=True):
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
         if load:
@@ -174,7 +171,13 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet50':
         model = ResNet50(one_channel=one_channel, num_classes=num_classes)
         if load:
-            model.model.load_state_dict(torch.load(load_path))
+            state_dict = torch.load(load_path)
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k[7:] # remove `module.`
+                new_state_dict[name] = v
+            # load params
+            model.load_state_dict(new_state_dict)
         if get_embedder:
             model = Embedder(model)
     elif model_str == 'resnet152':
@@ -185,12 +188,12 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             model = Embedder(model)
     elif model_str == 'resnet18_embedder':
         model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes), 
-            batchnormalize=batchnormalize)
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats)
         if load:
             model.load_state_dict(torch.load(load_path))
     elif model_str == 'resnet50_embedder':
         model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes), 
-            batchnormalize=batchnormalize)
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats)
         if load:
             model.load_state_dict(torch.load(load_path))
     elif model_str == 'convnet_embedder':
@@ -211,17 +214,20 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = ResNet50(num_classes=1000)
         model.model.load_state_dict(checkpoint['state_dict'])
         if get_embedder:
-            model = Embedder(model, batchnormalize=batchnormalize)
+            model = Embedder(model, batchnormalize=batchnormalize, 
+                track_running_stats=track_running_stats)
     elif model_str == 'simclr_pretrained_cifar':
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        model = Embedder(model, dim=64, batchnormalize=batchnormalize)
+        model = Embedder(model, dim=64, batchnormalize=batchnormalize, 
+            track_running_stats=track_running_stats)
     elif model_str == 'simclr':
         assert load == True
         checkpoint = torch.load(load_path)
         model = ResNetSimCLR(base_model='resnet18', out_dim=128)
         model.load_state_dict(checkpoint['state_dict'])
         if get_embedder:
-            model = Embedder(model, dim=128, batchnormalize=batchnormalize)
+            model = Embedder(model, dim=128, batchnormalize=batchnormalize, 
+                track_running_stats=track_running_stats)
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 

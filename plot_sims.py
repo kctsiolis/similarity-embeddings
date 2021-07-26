@@ -45,6 +45,8 @@ def get_args(parser):
                         help='Set this option to use batch normalization to normalize the features.')
     parser.add_argument('--cosine', action='store_true',
                         help='Set this option to use cosine similarity.')
+    parser.add_argument('--classifier', action='store_true',
+                        help='Get similarities from classifier layer.')
     parser.add_argument('--device', type=str, default='cpu', 
                         help='Device to use.')
     parser.add_argument('--save-dir', type=str, default=None,
@@ -168,13 +170,25 @@ def main():
 
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
-    model = get_model(args.model, one_channel=one_channel, num_classes=num_classes,
-        get_embedder=True, batchnormalize=args.batchnormalize,
-        track_running_stats=False)
+    if args.classifier:
+        model = get_model(args.model, load=True, load_path=args.load_path,
+            one_channel=one_channel, num_classes=num_classes,
+            get_embedder=False, batchnormalize=args.batchnormalize,
+            track_running_stats=False)
+    else:
+        model = get_model(args.model, load=True, load_path=args.load_path,
+            one_channel=one_channel, num_classes=num_classes,
+            get_embedder=True, batchnormalize=args.batchnormalize,
+            track_running_stats=False)
     model = model.to(device)
 
+    try:
+        dim = model.get_dim()
+    except RuntimeError:
+        dim = num_classes
+
     if args.augmentation == 'none':
-        model_embs, labels = get_embeddings(model, device, valid_loader, model.get_dim())
+        model_embs, labels = get_embeddings(model, device, valid_loader, dim)
         if args.cosine:
             model_embs = normalize_embeddings(model_embs)
 
