@@ -20,9 +20,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 import numpy as np
 from models import get_model
-from mnist import mnist_train_loader
-from cifar import cifar_train_loader
-from imagenet import imagenet_train_loader
+from loaders import dataset_loader
 from training import train_sup
 from logger import Logger
 
@@ -51,9 +49,6 @@ def get_args(parser):
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
                         help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
                             Can also specify multiple devices (separated by spaces) for multiprocessing.')
-    parser.add_argument('--augs', type=str, default='all', choices=['normalize', 'flip', 'all'],
-                        help='Data augmentations to use on training set (normalize only, normalize' \
-                            'and flip, normalize, flip, and crop).')
     parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'resnet152'],
                         help='Choice of model.')
     args = parser.parse_args()
@@ -72,15 +67,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     batch_size = int(args.batch_size / num_gpus)
 
     #Get the data
-    if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(batch_size=batch_size,
-            device=device, distributed=distributed)
-    elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(batch_size=batch_size,
-            device=device, distributed=distributed, augs=args.augs)
-    else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=batch_size,
-            distributed=distributed)
+    train_loader, valid_loader = dataset_loader(args.dataset,
+        batch_size, device, distributed)
 
     logger = Logger('teacher', args.dataset, args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'

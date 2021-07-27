@@ -66,8 +66,6 @@ class Embedder(nn.Module):
             self.features = nn.Sequential(*list(model.model.children())[:-1])
         except AttributeError:
             self.features = nn.Sequential(*list(model.children())[:-1])
-        except AttributeError:
-            self.features = nn.Sequential(*list(model.backbone.children())[:-1])
 
         try:
             self.dim = model.dim
@@ -133,59 +131,30 @@ class Classifier(nn.Module):
 
         return x
 
-class ResNetSimCLR(nn.Module):
-    """Class for the SimCLR model.
-
-    From PyTorch SimCLR repository.
-    https://github.com/sthalles/SimCLR/blob/master/  
-
-    """
-
-    def __init__(self, base_model, out_dim):
-        super(ResNetSimCLR, self).__init__()
-        self.resnet_dict = {"resnet18": resnet18(pretrained=False, num_classes=out_dim),
-                            "resnet50": resnet50(pretrained=False, num_classes=out_dim)}
-
-        self.backbone = self._get_basemodel(base_model)
-        dim_mlp = self.backbone.fc.in_features
-        self.dim = dim_mlp
-
-        # add mlp projection head
-        self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.backbone.fc)
-
-    def _get_basemodel(self, model_name):
-        return self.resnet_dict[model_name]
-
-    def forward(self, x):
-        return self.backbone(x)
-
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
     one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, 
     batchnormalize: bool = False, track_running_stats=True):
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
         if load:
-            model.model.load_state_dict(torch.load(load_path))
+            model.load_state_dict(torch.load(load_path))
         if get_embedder:
-            model = Embedder(model)
+            model = Embedder(model, batchnormalize=batchnormalize,
+                track_running_stats=track_running_stats)
     elif model_str == 'resnet50':
         model = ResNet50(one_channel=one_channel, num_classes=num_classes)
         if load:
-            state_dict = torch.load(load_path)
-            new_state_dict = OrderedDict()
-            for k, v in state_dict.items():
-                name = k[7:] # remove `module.`
-                new_state_dict[name] = v
-            # load params
-            model.load_state_dict(new_state_dict)
+            model.load_state_dict(torch.load(load_path))
         if get_embedder:
-            model = Embedder(model)
+            model = Embedder(model, batchnormalize=batchnormalize,
+                track_running_stats=track_running_stats)
     elif model_str == 'resnet152':
         model = ResNet152(one_channel=one_channel, num_classes=num_classes)
         if load:
-            model.model.load_state_dict(torch.load(load_path))
+            model.load_state_dict(torch.load(load_path))
         if get_embedder:
-            model = Embedder(model)
+            model = Embedder(model, batchnormalize=batchnormalize,
+                track_running_stats=track_running_stats)
     elif model_str == 'resnet18_embedder':
         model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes), 
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
@@ -220,14 +189,6 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
         model = Embedder(model, dim=64, batchnormalize=batchnormalize, 
             track_running_stats=track_running_stats)
-    elif model_str == 'simclr':
-        assert load == True
-        checkpoint = torch.load(load_path)
-        model = ResNetSimCLR(base_model='resnet18', out_dim=128)
-        model.load_state_dict(checkpoint['state_dict'])
-        if get_embedder:
-            model = Embedder(model, dim=128, batchnormalize=batchnormalize, 
-                track_running_stats=track_running_stats)
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 

@@ -16,10 +16,9 @@ import argparse
 import torch
 from torch import nn
 import numpy as np
+from torch.utils import data
 from models import get_model
-from mnist import mnist_train_loader
-from cifar import cifar_train_loader
-from imagenet import imagenet_train_loader
+from loaders import dataset_loader
 from training import predict
 from logger import Logger
 
@@ -64,14 +63,8 @@ def main():
     device = torch.device(args.device)
 
     #Get the data
-    if args.dataset == 'mnist':
-        train_loader, valid_loader = mnist_train_loader(batch_size=args.batch_size,
-            device=device)
-    elif args.dataset == 'cifar':
-        train_loader, valid_loader = cifar_train_loader(batch_size=args.batch_size,
-            device=device, augs=args.augs)
-    else:
-        train_loader, valid_loader = imagenet_train_loader(batch_size=args.batch_size)
+    train_loader, valid_loader = dataset_loader(args.dataset,
+        args.batch_size, device)
 
     logger = Logger('teacher', args.dataset, args, save=False)
             
