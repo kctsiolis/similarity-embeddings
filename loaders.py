@@ -21,11 +21,23 @@ except FileNotFoundError:
     config = open('../config.yaml', 'r')
 
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
-h5_path = parsed_config['imagenet_h5_path']
 data_path = parsed_config['imagenet_path']
 
 def dataset_loader(dataset: str, batch_size: int, 
-    device: torch.device, distributed: bool = False):
+    device: torch.device, distributed: bool = False
+    ) -> tuple([DataLoader, DataLoader]):
+    """Load a specified dataset.
+
+    Args:
+        dataset: String specifying which dataset to load.
+        batch_size: Batch size.
+        device: Device that batches will be loaded to.
+        distributed: Whether or not loading will be parallelized.
+
+    Returns:
+        Training and validation set data loaders.
+
+    """
     if dataset == 'mnist':
         return mnist_loader(batch_size=batch_size,
             device=device, distributed=distributed)
@@ -36,11 +48,25 @@ def dataset_loader(dataset: str, batch_size: int,
         return imagenet_loader(batch_size=batch_size,
             distributed=distributed)
 
-def imagenet_loader(batch_size, workers=10, distributed=False):
+def imagenet_loader(batch_size: int, workers: int = 10, 
+    distributed: bool = False
+    ) -> tuple([DataLoader, DataLoader]):
+    """Loader for the ImageNet dataset.
+
+    Args:
+        batch_size: Batch size.
+        workers: Number of workers.
+        distributed: Whether or not to parallelize.
+
+    Returns:
+        Training and validation set loaders.
+
+    """
     traindir = os.path.join(data_path, 'train')
     valdir = os.path.join(data_path, 'val')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                  std=[0.229, 0.224, 0.225])
 
     train_dataset = datasets.ImageFolder(
         traindir,
@@ -51,15 +77,15 @@ def imagenet_loader(batch_size, workers=10, distributed=False):
         ]))
 
     if distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        train_sampler = DistributedSampler(train_dataset)
     else:
         train_sampler = None
 
-    train_loader = torch.utils.data.DataLoader(
+    train_loader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=(train_sampler is None),
         num_workers=workers, pin_memory=True, sampler=train_sampler)
 
-    val_loader = torch.utils.data.DataLoader(
+    val_loader = DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -69,102 +95,6 @@ def imagenet_loader(batch_size, workers=10, distributed=False):
         num_workers=workers, pin_memory=True)
 
     return train_loader, val_loader
-
-def imagenet_h5_loader(batch_size, classes=[], shuffle=True,
-                        workers=10, distributed=False):
-    """Adapted from original code by Vikram Voleti. Used with his permission."""
-
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-
-    train_transform = transforms.Compose([
-                                        transforms.RandomResizedCrop(224),
-                                        transforms.RandomHorizontalFlip(),
-                                        transforms.ToTensor(),
-                                        normalize,
-                                        ])
-
-    val_transform = transforms.Compose([
-                                        transforms.Resize(256),
-                                        transforms.CenterCrop(224),
-                                        transforms.ToTensor(),
-                                        normalize,
-                                        ])
-
-    train_ds = ImageNetDataset('train', train_transform, classes)
-    val_ds = ImageNetDataset('val', val_transform, classes)
-
-    if distributed:
-        sampler = DistributedSampler(train_ds)
-        shuffle = False
-    else:
-        sampler = None
-
-    train_dl = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=shuffle,
-        num_workers=workers, pin_memory=True, sampler=sampler, drop_last=True)
-
-    val_dl = DataLoader(
-        val_ds, batch_size=batch_size, shuffle=False,
-        num_workers=workers, pin_memory=True, drop_last=True)
-
-    return train_dl, val_dl
-
-
-class ImageNetDataset(Dataset):
-    def __init__(self, split, transform=transforms.Compose([transforms.ToTensor()]), classes=[]):
-        self.h5_path = h5_path     # Path to ilsvrc2012.hdf5
-        self.split = split
-        self.transform = transform
-        self.classes = classes
-
-        assert os.path.exists(self.h5_path), f"ImageNet h5 file path does not exist! Given: {self.h5_path}"
-        assert self.split in ["train", "val", "test"], f"split must be 'train' or 'val' or 'test'! Given: {self.split}"
-
-        self.N_TRAIN = 1281167
-        self.N_VAL = 50000
-        self.N_TEST = 100000
-
-        if self.split in ['train', 'val']:
-            if len(self.classes) > 0:
-                class_idxs_dict = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagenet.json")))[self.split]
-                self.class_idxs = sorted([i for c in self.classes for i in class_idxs_dict[str(c)]])
-                del class_idxs_dict
-                self.n = len(self.class_idxs)
-            else:
-                if self.split == 'train':
-                    self.n  = self.N_TRAIN
-                elif self.split == 'val':
-                    self.n = self.N_VAL
-        else:
-            self.n = self.N_TEST
-
-        self.h5_data = None
-
-    def __len__(self):
-        return self.n
-
-    def __getitem__(self, idx):
-
-        # Get class idx
-        if len(self.classes) > 0 and self.split in ['train', 'val']:
-            idx = self.class_idxs[idx]
-
-        # Correct idx
-        if self.split == 'val':
-            idx += self.N_TRAIN
-        elif self.split == 'test':
-            idx += self.N_TRAIN + self.N_VAL
-
-        # Read h5 file
-        if self.h5_data is None:
-            self.h5_data = h5py.File(self.h5_path, mode='r')
-
-        # Extract info
-        image = self.transform(Image.open(io.BytesIO(self.h5_data['encoded_images'][idx])).convert('RGB'))
-        target = torch.from_numpy(self.h5_data['targets'][idx])[0].long() if self.split != 'test' else None
-
-        return image, target
 
 class TransformedDataset(torch.utils.data.Dataset):
     """Wrapper class for augmented dataset.
@@ -181,7 +111,7 @@ class TransformedDataset(torch.utils.data.Dataset):
         transform: transforms.Compose):
         """Instantiate object.
         
-        Args:
+        Attributes:
             dataset: Original dataset.
             transform: Data augmentation to apply.
 

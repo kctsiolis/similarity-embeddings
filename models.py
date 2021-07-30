@@ -1,3 +1,5 @@
+"""Collection of classes and functions for neural network vision models."""
+
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -5,7 +7,22 @@ from torchvision.models import resnet18, resnet50, resnet152
 from collections import OrderedDict
 
 class ResNet18(nn.Module):
+    """Wrapper class for the ResNet18 model (imported from Torch).
+
+    Attributes:
+        model: The Torch model.
+        dim: Dimension of the last embedding layer
+
+    """
     def __init__(self, num_classes=10, one_channel=False, pretrained=False):
+        """Instantiate object of class ResNet18.
+        
+        Args:
+            num_classes: Number of classes (for applying model to classification task).
+            one_channel: Whether or not input data has one colour channel (for MNIST).
+            pretrained: Whether or not to get pretrained model from Torch.
+
+        """
         super().__init__()
         if pretrained:
             self.model = resnet18(pretrained=True)
@@ -23,7 +40,22 @@ class ResNet18(nn.Module):
         return self.dim
 
 class ResNet50(nn.Module):
+    """Wrapper class for the ResNet50 model (imported from Torch).
+
+    Attributes:
+        model: The Torch model.
+        dim: Dimension of the last embedding layer
+
+    """
     def __init__(self, num_classes=10, one_channel=False, pretrained=False):
+        """Instantiate object of class ResNet50.
+        
+        Args:
+            num_classes: Number of classes (for applying model to classification task).
+            one_channel: Whether or not input data has one colour channel (for MNIST).
+            pretrained: Whether or not to get pretrained model from Torch.
+
+        """
         super().__init__()
         if pretrained:
             self.model = resnet50(pretrained=True)
@@ -41,7 +73,22 @@ class ResNet50(nn.Module):
         return self.dim
 
 class ResNet152(nn.Module):
+    """Wrapper class for the ResNet152 model (imported from Torch).
+
+    Attributes:
+        model: The Torch model.
+        dim: Dimension of the last embedding layer
+
+    """
     def __init__(self, num_classes=10, one_channel=False):
+        """Instantiate object of class ResNet152.
+        
+        Args:
+            num_classes: Number of classes (for applying model to classification task).
+            one_channel: Whether or not input data has one colour channel (for MNIST).
+            pretrained: Whether or not to get pretrained model from Torch.
+
+        """
         super().__init__()
         self.model = resnet152(num_classes=num_classes)
         self.dim = 2048
@@ -55,10 +102,25 @@ class ResNet152(nn.Module):
     def get_dim(self):
         return self.dim
 
-#Model without linear classification layer
 class Embedder(nn.Module):
+    """Wrapper class for a feature embedder (model w/o classification layer).
+
+    Attributes:
+        features: The feature embedder.
+        dim: Embedding dimension.
+
+    """
     def __init__(self, model, dim=None, batchnormalize=False,
         track_running_stats=True):
+        """Instantiate object of class Embedder.
+
+        Args:
+            model: A model with a classification layer (which will be removed).
+            dim: The embedding dimension of the model.
+            batchnormalize: Whether or not to add batch norm after feature embedding.
+            track_running_stats: Which statistics to use for batch norm (if applicable).
+
+        """
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
@@ -92,7 +154,22 @@ class Embedder(nn.Module):
         return self.dim
 
 class ConvNetEmbedder(nn.Module):
+    """Wrapper class for simple CNN embedder.
+    
+    Attributes:
+        conv1: First conv layer.
+        conv2: Second conv layer.
+        pool: Pooling layer.
+        dim: Embedding dimension.
+
+    """
     def __init__(self, one_channel=False):
+        """Instantiate ConvNetEmbedder object.
+        
+        Args:
+            one_channel: Whether or not input has one colour channel (for MNIST).
+
+        """
         super().__init__()
         if one_channel:
             self.conv1 = nn.Conv2d(1, 6, 5)
@@ -102,20 +179,32 @@ class ConvNetEmbedder(nn.Module):
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.dim = 16 * 6 * 5
 
-    #Get the embedding
     def forward(self, x):
+        """Get the embeddings."""
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1) # flatten all dimensions except batch
         return x
 
-    #Return embedding dimension
     def get_dim(self):
         return self.dim
 
-#Class for a classifier on top of an embedder
 class Classifier(nn.Module):
+    """Wrapper class for a classifier on top of an embedder.
+    
+    Attributes:
+        embedder: The embedder (frozen).
+        linear_layer: The new linear layer on top of the embedder.
+
+    """
     def __init__(self, embedder, num_classes=10):
+        """Instantiate the classifier object.
+        
+        Args:
+            embedder: The embedder.
+            num_classes: The number of classes.
+
+        """
         super().__init__()
         self.embedder = embedder
         #Freeze the embedding layer
@@ -133,7 +222,23 @@ class Classifier(nn.Module):
 
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
     one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, 
-    batchnormalize: bool = False, track_running_stats=True):
+    batchnormalize: bool = False, track_running_stats=True) -> nn.Module:
+    """Instantiate or load a specified model.
+    
+    Args:
+        model_str: String specifying the model.
+        load: Set to true to load existing model, otherwise instantiate a new one.
+        load_path: Path to load model from (if we are loading).
+        one_channel: Whether or not model sees only one colour channel.
+        num_classes: Number of classes (if we are classifying).
+        get_embedder: Whether or not to only get the feature embedding layers.
+        batchnormalize: Whether or not to apply batch norm to the embeddings.
+        track_running_stats: Which statistics to use for batch norm (if applicable).
+
+    Returns:
+        The desired model.
+    
+    """
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
         if load:

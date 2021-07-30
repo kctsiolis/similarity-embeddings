@@ -11,7 +11,6 @@ from torchvision import transforms
 import torch
 from torch.distributions import Categorical, RelaxedOneHotCategorical
 
-#Gaussian blur with parameter sigma (which controls the blur intensity)
 def gaussian_blur(data: torch.Tensor, alpha_max: float, 
     beta: float, device = torch.device, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
@@ -53,6 +52,25 @@ def gaussian_blur(data: torch.Tensor, alpha_max: float,
 def color_jitter(data: torch.Tensor, alpha_max: float, 
     beta: float, device = torch.device, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
+    """Apply colour jitter data augmentation.
+
+    Since colour jitter has four parameters (brightness, contrast,
+    saturation, and hue), the augmentation strength alpha represents
+    the sum of these. We sample from the relaxed categorical distribution
+    to weigh each of the four parameters and then multiply by alpha.
+
+    Args:
+        data: Input data to be augmented.
+        alpha_max: Maximum augmentation strength.
+        beta: Similarity probability parameter.
+        device: Device on which to store batch.
+        random: If true, sample intensities i.i.d. Otherwise, use alpha_max.
+
+    Returns:
+        The augmented data with the similarity probabilities.
+    
+    """
+
     num_samples = data.shape[0]
     if alpha_max < 0 or alpha_max > 1:
         raise ValueError("Maximum augmentation strength must be in [0,1].")
@@ -78,16 +96,34 @@ def color_jitter(data: torch.Tensor, alpha_max: float,
 
     return data, sim_prob
 
-def random_crop(data: torch.Tensor, s_max: int,
+def random_crop(data: torch.Tensor, alpha_max: int,
     beta: float, device = torch.device, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
+    """Perform random crop augmentation on the input.
+    
+    Here, alpha controls the proportion of the image that is thrown
+    away in the crop. For example, alpha = 0 retains the entire image,
+    while alpha = 0.5 retains half the image. In all cases, a random
+    portion of the image is chosen for the crop.
+
+    Args:
+        data: Input data to be augmented.
+        alpha_max: Maximum augmentation strength.
+        beta: Similarity probability parameter.
+        device: Device on which to store batch.
+        random: If true, sample intensities i.i.d. Otherwise, use alpha_max.
+
+    Returns:
+        The augmented data with the similarity probabilities.
+
+    """
     img_size = min(data.shape[2], data.shape[3])
-    if s_max >= 1 or s_max < 0:
+    if alpha_max >= 1 or alpha_max < 0:
         raise ValueError("Maximum augmentation strength must be in [0,1).")
     if random:
-        s = (torch.rand(data.shape[0])*s_max).to(device)
+        s = (torch.rand(data.shape[0])*alpha_max).to(device)
     else:
-        s = (torch.ones(data.shape[0])*s_max).to(device)
+        s = (torch.ones(data.shape[0])*alpha_max).to(device)
     
     for i, image in enumerate(data):
         sz = 1 - s[i].item()
@@ -114,7 +150,7 @@ def augment(data: torch.Tensor, augmentation: str, device: torch.device,
         The augmented data and the similarity probabilities.
 
     Raises:
-        NotImplementedError: Only Gaussian blur is implemented.
+        NotImplementedError: Only Gaussian blur, colour jitter, and random crop are implemented.
 
     """
     #Sample an augmentation strength for each instance in the batch

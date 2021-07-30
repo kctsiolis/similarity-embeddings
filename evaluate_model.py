@@ -1,4 +1,4 @@
-"""Train a model ("teacher") in supervised fashion on an image dataset.
+"""Evaluate a model on a classification task.
 
 Models supported:
     ResNet18 (imported from PyTorch)
