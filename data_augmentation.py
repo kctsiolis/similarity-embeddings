@@ -2,15 +2,17 @@
 
 Augmentations supported:
     Gaussian blur 
+    Colour jitter
+    Random crop
 
 """
 
 from torchvision import transforms
 import torch
-import math
+from torch.distributions import Categorical, RelaxedOneHotCategorical
 
 #Gaussian blur with parameter sigma (which controls the blur intensity)
-def gaussian_blur_sigma(data: torch.Tensor, sigma_max: float, 
+def gaussian_blur(data: torch.Tensor, alpha_max: float, 
     beta: float, device = torch.device, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
     """Apply gaussian blur with randomly sampled sigma parameter.
@@ -20,7 +22,7 @@ def gaussian_blur_sigma(data: torch.Tensor, sigma_max: float,
 
     Args:
         data: Input data to be augmented.
-        sigma_max: Largest possible augmentation intensity.
+        alpha_max: Largest possible augmentation intensity.
         beta: Similiarity probability parameter.
         device: Device on which to store batch.
         random: If true, sample intensities i.i.d., otherwise use sigma_max.
@@ -29,8 +31,11 @@ def gaussian_blur_sigma(data: torch.Tensor, sigma_max: float,
         The augmented data and the similarity probabilities.
 
     """
-    if sigma_max <= 0:
+    if alpha_max <= 0:
         raise ValueError("Maximum standard deviation must be positive.")
+
+    sigma_max = alpha_max * 5
+
     if random:
         sigma = (torch.rand(data.shape[0])*sigma_max).to(device)
     else:
@@ -45,21 +50,31 @@ def gaussian_blur_sigma(data: torch.Tensor, sigma_max: float,
 
     return data, sim_prob
 
-def color_jitter(data: torch.Tensor, s_max: float, 
+def color_jitter(data: torch.Tensor, alpha_max: float, 
     beta: float, device = torch.device, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
-    if s_max < 0:
-        raise ValueError("Maximum augmentation strength should be non-negative.")
+    num_samples = data.shape[0]
+    if alpha_max < 0 or alpha_max > 1:
+        raise ValueError("Maximum augmentation strength must be in [0,1].")
     if random:
-        s = (torch.rand(data.shape[0])*s_max).to(device)
+        a = (torch.rand(num_samples)*alpha_max).to(device)
     else:
-        s = (torch.ones(data.shape[0])*s_max).to(device)
+        a = (torch.ones(num_samples)*alpha_max).to(device)
+
+    m = RelaxedOneHotCategorical(torch.Tensor([1.0]), torch.Tensor([
+        0.25, 0.25, 0.25, 0.25]))
+    m_sample = m.sample(sample_shape=torch.Size([num_samples]))
+
+    pm = Categorical(torch.Tensor([0.5, 0.5]))
+    pm_sample = pm.sample(sample_shape=torch.Size([num_samples, 3])) * 2 - 1
 
     for i, image in enumerate(data):
-        si = s[i].item()
-        data[i,:,:,:] = transforms.ColorJitter(0.8 * si, 0.8 * si, 0.8 * si, 0.2 * si)(image)
+        b, c, s, h = m_sample[i][0], m_sample[i][1], m_sample[i][2], m_sample[i][3]
+        b, c, s, h = b*a[i].item(), c*a[i].item(), s*a[i].item(), (h*a[i].item())/2
+        b, c, s = 1 + pm_sample[i][0]*b, 1 + pm_sample[i][1]*c, 1 + pm_sample[i][2]*s
+        data[i,:,:,:] = transforms.ColorJitter(b, c, s, h)(image)
 
-    sim_prob = torch.exp(-beta * s)
+    sim_prob = torch.exp(-beta * a)
 
     return data, sim_prob
 
@@ -104,8 +119,8 @@ def augment(data: torch.Tensor, augmentation: str, device: torch.device,
     """
     #Sample an augmentation strength for each instance in the batch
     augmented_data = data.detach().clone()
-    if augmentation == 'blur-sigma':
-        return gaussian_blur_sigma(augmented_data, alpha_max, beta, device, random)
+    if augmentation == 'blur':
+        return gaussian_blur(augmented_data, alpha_max, beta, device, random)
     elif augmentation == 'color-jitter':
         return color_jitter(augmented_data, alpha_max, beta, device, random)
     elif augmentation == 'random-crop':

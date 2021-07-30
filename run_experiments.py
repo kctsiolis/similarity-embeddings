@@ -59,7 +59,7 @@ def get_args(parser):
                         help='Type of loss function to use for similarity experiments.')
     parser.add_argument('--temp', type=float, default=[0.01], nargs='+',
                         help='Temperature in sigmoid function converting similarity score to probability.')
-    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'blur-kernel'], default='blur-sigma',
+    parser.add_argument('--augmentation', type=str, choices=['blur', 'color-jitter', 'random-crop'], default='blur',
                         help='Augmentation to use (if applicable).')
     parser.add_argument('--alpha-max', type=int, default=[15], nargs='+',
                         help='Largest possible augmentation strength.')
