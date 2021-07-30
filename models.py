@@ -164,7 +164,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes), 
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
         if load:
-            model.load_state_dict(torch.load(load_path))
+            model.load_state_dict(torch.load(load_path, map_location='cpu'))
     elif model_str == 'convnet_embedder':
         model = ConvNetEmbedder(one_channel=one_channel)
         if load:

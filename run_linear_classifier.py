@@ -43,7 +43,7 @@ def get_args(parser):
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--early-stop', type=int, default=10, metavar='E',
+    parser.add_argument('--early-stop', type=int, default=20, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
@@ -51,8 +51,8 @@ def get_args(parser):
                         help='Path to the distilled "student" model.')
     parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 
-                        'resnet18', 'resnet50', 'resnet50_simclr'],
+    parser.add_argument('--model', type=str, default='resnet18_embedder', choices=['cnn', 
+                        'resnet18_embedder', 'resnet50_embedder', 'resnet50_simclr'],
                         help='Type of model for the embedder.')
     args = parser.parse_args()
 

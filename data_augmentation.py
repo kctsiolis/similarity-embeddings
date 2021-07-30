@@ -56,7 +56,8 @@ def color_jitter(data: torch.Tensor, s_max: float,
         s = (torch.ones(data.shape[0])*s_max).to(device)
 
     for i, image in enumerate(data):
-        data[i,:,:,:] = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)(image)
+        si = s[i].item()
+        data[i,:,:,:] = transforms.ColorJitter(0.8 * si, 0.8 * si, 0.8 * si, 0.2 * si)(image)
 
     sim_prob = torch.exp(-beta * s)
 
@@ -66,16 +67,16 @@ def random_crop(data: torch.Tensor, s_max: int,
     beta: float, device = torch.device, random: bool = True
     ) -> tuple([torch.Tensor, torch.Tensor]):
     img_size = min(data.shape[2], data.shape[3])
-    if s_max >= img_size:
-        raise ValueError("Maximum augmentation strength must be at most \
-            one less than image height/width.")
+    if s_max >= 1 or s_max < 0:
+        raise ValueError("Maximum augmentation strength must be in [0,1).")
     if random:
-        s = (math.ceil(torch.rand(data.shape[0])*s_max)).to(device)
+        s = (torch.rand(data.shape[0])*s_max).to(device)
     else:
         s = (torch.ones(data.shape[0])*s_max).to(device)
     
     for i, image in enumerate(data):
-        data[i,:,:,:] = transforms.RandomCrop(img_size-s)(image)
+        sz = 1 - s[i].item()
+        data[i,:,:,:] = transforms.RandomResizedCrop(size=image.shape[-2:], scale=(sz,sz))(image)
 
     sim_prob = torch.exp(-beta * (s / img_size))
 
@@ -107,7 +108,7 @@ def augment(data: torch.Tensor, augmentation: str, device: torch.device,
         return gaussian_blur_sigma(augmented_data, alpha_max, beta, device, random)
     elif augmentation == 'color-jitter':
         return color_jitter(augmented_data, alpha_max, beta, device, random)
-    elif augmentation == 'random_crop':
+    elif augmentation == 'random-crop':
         return random_crop(augmented_data, alpha_max, beta, device, random)
     else:
         raise NotImplementedError

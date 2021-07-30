@@ -6,4 +6,4 @@ jobs/
 data/
 evaluate_face_embeddings.py
 load_face_embeddings.py
-plots/
+*plots/

@@ -33,7 +33,7 @@ def get_args(parser):
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Input batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=50, metavar='N',
+    parser.add_argument('--epochs', type=int, default=100, metavar='N',
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
@@ -45,7 +45,7 @@ def get_args(parser):
                         help='Patience used in the Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--early-stop', type=int, default=10, metavar='E',
+    parser.add_argument('--early-stop', type=int, default=20, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
@@ -56,7 +56,8 @@ def get_args(parser):
     parser.add_argument('--teacher-model', type=str, default='resnet18', 
                         choices=['resnet18', 'resnet50_pretrained', 'simclr_pretrained'],
                         help='Choice of student model.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'cnn'],
+    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 
+                        'resnet50', 'cnn'],
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
@@ -86,7 +87,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     teacher = get_model(args.teacher_model, load=True, load_path=args.load_path, 
         one_channel=one_channel, num_classes=num_classes, get_embedder=True)
-    student = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
+    student = get_model(args.model, one_channel=one_channel, num_classes=num_classes,
+        get_embedder=True)
     student.to(device)
     teacher.to(device)
 

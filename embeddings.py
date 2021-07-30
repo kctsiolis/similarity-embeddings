@@ -1,4 +1,5 @@
-import numpy as np 
+import numpy as np
+import torch 
 
 def load_embeddings(path):
     return np.load(path)

@@ -33,9 +33,12 @@ def get_args(parser):
                         help='Type of model being evaluated.')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='Batch size (default: 64)')
+    parser.add_argument('--num-samples', type=int, default=None, metavar='N',
+                        help='Number of data samples to use. Default is to use entire validation set.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'], default='cifar',
                         help='Dataset model was trained on.')
-    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'none'], default='blur-sigma',
+    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'color-jitter', 
+                        'random-crop', 'none'], default='blur-sigma',
                         help='Type of augmentation to use.') 
     parser.add_argument('--alpha', type=float, default=[1.0], nargs='+',
                         help='Augmentation intensity.')
@@ -181,11 +184,14 @@ def main():
 
     if args.augmentation == 'none':
         model_embs, labels = get_embeddings(model, device, valid_loader, dim)
+
+        if args.num_samples is not None:
+            model_embs = model_embs[:args.num_samples,:]
+
         if args.cosine:
             model_embs = normalize_embeddings(model_embs)
 
-        #model_sims = np.matmul(model_embs, np.transpose(model_embs))
-
+        """
         sorted_embs = []
         c = int(np.max(labels) + 1)
 
@@ -205,8 +211,12 @@ def main():
 
         print('INTER CLASS SIMS:')
         summary(inter_class_sims)
-        
+
         model_sims = intra_class_sims + (2 * inter_class_sims)
+        """
+
+        model_sims = np.matmul(model_embs, np.transpose(model_embs))
+
         summary(model_sims)
         if args.save_dir is not None:
             save_path = os.path.join(args.save_dir, '{}_{}_original.png'.format(args.model, args.dataset))
