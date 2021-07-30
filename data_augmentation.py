@@ -79,18 +79,21 @@ def color_jitter(data: torch.Tensor, alpha_max: float,
     else:
         a = (torch.ones(num_samples)*alpha_max).to(device)
 
-    m = RelaxedOneHotCategorical(torch.Tensor([1.0]), torch.Tensor([
-        0.25, 0.25, 0.25, 0.25]))
-    m_sample = m.sample(sample_shape=torch.Size([num_samples]))
+    # m = RelaxedOneHotCategorical(torch.Tensor([1.0]), torch.Tensor([
+    #     0.25, 0.25, 0.25, 0.25]))
+    # m_sample = m.sample(sample_shape=torch.Size([num_samples]))
 
     pm = Categorical(torch.Tensor([0.5, 0.5]))
     pm_sample = pm.sample(sample_shape=torch.Size([num_samples, 3])) * 2 - 1
 
     for i, image in enumerate(data):
-        b, c, s, h = m_sample[i][0], m_sample[i][1], m_sample[i][2], m_sample[i][3]
-        b, c, s, h = b*a[i].item(), c*a[i].item(), s*a[i].item(), (h*a[i].item())/2
-        b, c, s = 1 + pm_sample[i][0]*b, 1 + pm_sample[i][1]*c, 1 + pm_sample[i][2]*s
-        data[i,:,:,:] = transforms.ColorJitter(b, c, s, h)(image)
+        # b, c, s, h = m_sample[i][0], m_sample[i][1], m_sample[i][2], m_sample[i][3]
+        # b, c, s, h = b*a[i].item(), c*a[i].item(), s*a[i].item(), (h*a[i].item())/2
+        b = 1 + pm_sample[i][0]*a[i].item()
+        c = 1 + pm_sample[i][1]*a[i].item()
+        s = 1 + pm_sample[i][2]*a[i].item()
+        h = a[i].item() / 2
+        data[i,:,:,:] = transforms.ColorJitter((b,b), (c,c), (s,s), (h,h))(image)
 
     sim_prob = torch.exp(-beta * a)
 
