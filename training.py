@@ -77,9 +77,7 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
 
     #Keep track of losses and accuracies
     train_losses = []
-    train_accs = []
     val_losses = []
-    val_accs = []
     epochs_until_stop = early_stop
 
     #Keep track of changes in learning rate
@@ -95,9 +93,7 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
         logger.log(log_str)
 
         train_losses.append(train_loss)
-        #train_accs.append(train_acc)
         val_losses.append(val_loss)
-        val_accs.append(val_acc)
 
         #Check if validation loss is worsening
         if val_loss > min(val_losses):
@@ -127,9 +123,9 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
             scheduler.step()
             
     if rank == 0:
-        train_report(train_losses, val_losses, train_accs, val_accs, change_epochs=change_epochs, logger=logger)
+        train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 
-    return train_losses, train_accs, val_losses, val_accs
+    return train_losses, val_losses
 
 def train_distillation(student: nn.Module, teacher: nn.Module, 
     train_loader: torch.utils.data.DataLoader, 
@@ -206,7 +202,7 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
         log_str += 'Validation set: Average loss: {:.6f}\n'.format(val_loss)
         logger.log(log_str)
 
-        #train_losses.append(train_loss)
+        train_losses.append(train_loss)
         val_losses.append(val_loss)
 
         #Check if validation loss is worsening

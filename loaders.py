@@ -3,14 +3,8 @@
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data.distributed import DistributedSampler
-
-import h5py
-import io
-import json
 import os
 import torch
-
-from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.datasets as datasets
 import yaml
@@ -100,7 +94,7 @@ def imagenet_loader(batch_size: int, workers: int = 10,
 
     return train_loader, val_loader
 
-class TransformedDataset(torch.utils.data.Dataset):
+class TransformedDataset(Dataset):
     """Wrapper class for augmented dataset.
     
     From https://discuss.pytorch.org/t/apply-different-transform-data-augmentation-to-train-and-validation/63580.
@@ -133,7 +127,7 @@ class TransformedDataset(torch.utils.data.Dataset):
 
 def cifar_loader(batch_size: int, device: torch.device, 
     train: True, distributed: bool = False,
-    ) -> tuple([torch.utils.data.DataLoader, torch.utils.data.DataLoader]):
+    ) -> tuple([DataLoader, DataLoader]):
     """Load the CIFAR-10 training set and split into training and validation.
 
     Based on https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
@@ -205,8 +199,8 @@ def cifar_loader(batch_size: int, device: torch.device,
         return test_loader, None
 
 def mnist_loader(batch_size: int, device: torch.device,
-    distributed: bool = False) -> tuple([torch.utils.data.DataLoader, 
-    torch.utils.data.DataLoader]):
+    train: bool = True, distributed: bool = False
+    ) -> tuple([DataLoader, DataLoader]):
     """Load the MNIST training set and split into training and validation.
 
     Code based on PyTorch example code
@@ -221,36 +215,47 @@ def mnist_loader(batch_size: int, device: torch.device,
         Training set and validation set loaders.
 
     """
-    train_kwargs = {'batch_size': batch_size}
-    valid_kwargs = {'batch_size': batch_size}
-    if device.type == 'cuda':
-        cuda_kwargs = {
-            'num_workers': 1,
-            'pin_memory': True,
-            'shuffle': not distributed
-        }
-        train_kwargs.update(cuda_kwargs)
-        valid_kwargs.update(cuda_kwargs)
+    if train:
+        train_kwargs = {'batch_size': batch_size}
+        valid_kwargs = {'batch_size': batch_size}
+        if device.type == 'cuda':
+            cuda_kwargs = {
+                'num_workers': 1,
+                'pin_memory': True,
+                'shuffle': not distributed
+            }
+            train_kwargs.update(cuda_kwargs)
+            valid_kwargs.update(cuda_kwargs)
 
-    transform=transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-        ])
+        transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+            ])
 
-    #Extract MNIST training set
-    train_set = datasets.MNIST('../data', train=True, download=True,
-                       transform=transform)
+        #Extract MNIST training set
+        train_set = datasets.MNIST('../data', train=True, download=True,
+            transform=transform)
 
-    #Split original training set into new training and validation sets
-    train_subset, valid_subset = torch.utils.data.random_split(train_set,
-        [50000, 10000])
+        #Split original training set into new training and validation sets
+        train_subset, valid_subset = torch.utils.data.random_split(train_set,
+            [50000, 10000])
 
-    if distributed:
-        sampler = DistributedSampler(train_subset)
+        if distributed:
+            sampler = DistributedSampler(train_subset)
+        else:
+            sampler = None
+            
+        train_loader = DataLoader(train_subset, sampler=sampler, **train_kwargs)
+        valid_loader = DataLoader(valid_subset, **valid_kwargs)
+
+        return train_loader, valid_loader
     else:
-        sampler = None
-        
-    train_loader = torch.utils.data.DataLoader(train_subset, sampler=sampler, **train_kwargs)
-    valid_loader = torch.utils.data.DataLoader(valid_subset, **valid_kwargs)
+        transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+            ])
+        test_set = datasets.MNIST('../data', train=False, download=True,
+            transform=transform)
+        test_loader = DataLoader(test_set, batch_size=batch_size)
 
-    return train_loader, valid_loader
+        return test_loader, None
