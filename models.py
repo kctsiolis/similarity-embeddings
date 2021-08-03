@@ -270,6 +270,12 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
         if load:
             model.load_state_dict(torch.load(load_path, map_location='cpu'))
+    elif model_str == 'resnet50_classifier':
+        model = Classifier(Embedder(ResNet50(one_channel=one_channel,
+            num_classes=num_classes), batchnormalize=batchnormalize, 
+            track_running_stats=track_running_stats))
+        if load:
+            model.load_state_dict(torch.load(load_path, map_location='cpu'))
     elif model_str == 'convnet_embedder':
         model = ConvNetEmbedder(one_channel=one_channel)
         if load:
@@ -290,10 +296,11 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         if get_embedder:
             model = Embedder(model, batchnormalize=batchnormalize, 
                 track_running_stats=track_running_stats)
-    elif model_str == 'simclr_pretrained_cifar':
+    elif model_str == 'resnet50_pretrained_cifar':
         model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        model = Embedder(model, dim=64, batchnormalize=batchnormalize, 
-            track_running_stats=track_running_stats)
+        if get_embedder:
+            model = Embedder(model, dim=64, batchnormalize=batchnormalize, 
+                track_running_stats=track_running_stats)
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 

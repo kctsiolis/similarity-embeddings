@@ -24,7 +24,8 @@ parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 data_path = parsed_config['imagenet_path']
 
 def dataset_loader(dataset: str, batch_size: int, 
-    device: torch.device, distributed: bool = False
+    device: torch.device, train: bool = True,
+    distributed: bool = False
     ) -> tuple([DataLoader, DataLoader]):
     """Load a specified dataset.
 
@@ -32,6 +33,7 @@ def dataset_loader(dataset: str, batch_size: int,
         dataset: String specifying which dataset to load.
         batch_size: Batch size.
         device: Device that batches will be loaded to.
+        train: Whether or not to use the training set.
         distributed: Whether or not loading will be parallelized.
 
     Returns:
@@ -40,11 +42,13 @@ def dataset_loader(dataset: str, batch_size: int,
     """
     if dataset == 'mnist':
         return mnist_loader(batch_size=batch_size,
-            device=device, distributed=distributed)
+            device=device, train=train, distributed=distributed)
     elif dataset == 'cifar':
         return cifar_loader(batch_size=batch_size,
-            device=device, distributed=distributed)
+            device=device, train=train, distributed=distributed)
     else:
+        if not train:
+            raise ValueError('Test set not available for ImageNet.')
         return imagenet_loader(batch_size=batch_size,
             distributed=distributed)
 
@@ -128,7 +132,7 @@ class TransformedDataset(torch.utils.data.Dataset):
 
 
 def cifar_loader(batch_size: int, device: torch.device, 
-    distributed: bool = False,
+    train: True, distributed: bool = False,
     ) -> tuple([torch.utils.data.DataLoader, torch.utils.data.DataLoader]):
     """Load the CIFAR-10 training set and split into training and validation.
 
@@ -137,54 +141,68 @@ def cifar_loader(batch_size: int, device: torch.device,
     Args:
         batch_size: Batch size.
         device: Device being used.
+        train: Whether or not training set is being loaded.
         distributed: Whether or not we are conducting parallel computation.
 
     Returns:
         Training and validation set loaders.
 
     """
-    train_kwargs = {'batch_size': batch_size}
-    valid_kwargs = {'batch_size': batch_size}
-    if device.type == 'cuda':
-        cuda_kwargs = {
-            'num_workers': 1,
-            'pin_memory': True,
-            'shuffle': not distributed
-        }
-        train_kwargs.update(cuda_kwargs)
-        valid_kwargs.update(cuda_kwargs)
+    if train:
+        train_kwargs = {'batch_size': batch_size}
+        valid_kwargs = {'batch_size': batch_size}
+        if device.type == 'cuda':
+            cuda_kwargs = {
+                'num_workers': 1,
+                'pin_memory': True,
+                'shuffle': not distributed
+            }
+            train_kwargs.update(cuda_kwargs)
+            valid_kwargs.update(cuda_kwargs)
 
-    train_transforms = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-        ])
+        train_transforms = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            ])
 
-    valid_transforms = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
-        ])
+        valid_transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            ])
 
-    train_set = datasets.CIFAR10(root='./data', train=True,
-        download=True)
+        train_set = datasets.CIFAR10(root='./data', train=True,
+            download=True)
 
-    #Split original training set into new training and validation sets
-    train_subset, valid_subset = torch.utils.data.random_split(train_set,
-        [40000, 10000])
+        #Split original training set into new training and validation sets
+        train_subset, valid_subset = torch.utils.data.random_split(train_set,
+            [40000, 10000])
 
-    train_transformed = TransformedDataset(train_subset, train_transforms)
-    valid_transformed = TransformedDataset(valid_subset, valid_transforms)
+        train_transformed = TransformedDataset(train_subset, train_transforms)
+        valid_transformed = TransformedDataset(valid_subset, valid_transforms)
 
-    if distributed:
-        sampler = DistributedSampler(train_transformed)
+        if distributed:
+            sampler = DistributedSampler(train_transformed)
+        else:
+            sampler = None
+
+        train_loader = torch.utils.data.DataLoader(train_transformed, sampler=sampler, **train_kwargs)
+        valid_loader = torch.utils.data.DataLoader(valid_transformed, **valid_kwargs)
+
+        return train_loader, valid_loader
     else:
-        sampler = None
+        test_transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
 
-    train_loader = torch.utils.data.DataLoader(train_transformed, sampler=sampler, **train_kwargs)
-    valid_loader = torch.utils.data.DataLoader(valid_transformed, **valid_kwargs)
+        test_set = datasets.CIFAR10(root='./data', train=False,
+        download=True, transform=test_transforms)
+        
+        test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-    return train_loader, valid_loader
+        return test_loader, None
 
 def mnist_loader(batch_size: int, device: torch.device,
     distributed: bool = False) -> tuple([torch.utils.data.DataLoader, 

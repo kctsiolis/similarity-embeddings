@@ -26,23 +26,19 @@ def get_args(parser):
     """Collect command line arguments."""
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
+    parser.add_argument('--split', type=str, choices=['train', 'val', 'test'] ,metavar='D',
+        help='Choice of either training, validation, or test subset (where applicable).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Batch size (default: 64)')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
     parser.add_argument('--device', type=str, default='cpu',
                         help='Name of CUDA device being used (if any).')
-    parser.add_argument('--augs', type=str, default='all', choices=['normalize', 'flip', 'all'],
-                        help='Data augmentations to use on training set (normalize only, normalize' \
-                            'and flip, normalize, flip, and crop).')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'resnet152',
-                        'resnet50_pretrained', 'simclr_pretrained'],
+    parser.add_argument('--model', type=str, default='resnet18',
                         help='Choice of model.')
     parser.add_argument('--load-path', type=str,
                         help='Path to the teacher model.')
-    parser.add_argument('--all-subsets', action='store_true',
-                        help='Evaluate on all subsets of the data (including the training set). Otherwise ' \
-                            'only evaluate on validation set.')
+
     args = parser.parse_args()
 
     return args    
@@ -63,8 +59,10 @@ def main():
     device = torch.device(args.device)
 
     #Get the data
-    train_loader, valid_loader = dataset_loader(args.dataset,
-        args.batch_size, device)
+    train = args.split != 'test'
+
+    loader1, loader2 = dataset_loader(args.dataset,
+        args.batch_size, device, train=train)
 
     logger = Logger('teacher', args.dataset, args, save=False)
             
@@ -75,9 +73,12 @@ def main():
         one_channel=one_channel, num_classes=num_classes)
     model.to(device)
 
-    if args.all_subsets:
-        predict(model, device, train_loader, nn.CrossEntropyLoss(), logger, 'Training')
-    predict(model, device, valid_loader, nn.CrossEntropyLoss(), logger, 'Validation')
+    if args.split == 'train':
+        predict(model, device, loader1, nn.CrossEntropyLoss(), logger, 'Training')
+    elif args.split == 'val':
+        predict(model, device, loader2, nn.CrossEntropyLoss(), logger, 'Validation')
+    else:
+        predict(model, device, loader1, nn.CrossEntropyLoss(), logger, 'Test')
 
 if __name__ == '__main__':
     main()

@@ -71,7 +71,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     #Get the data
     train_loader, valid_loader = dataset_loader(args.dataset,
-        batch_size, device, distributed)
+        batch_size, device, train=True, distributed=distributed)
 
     logger = Logger('linear_classifier', args.dataset, args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'

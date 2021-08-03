@@ -68,7 +68,7 @@ def main():
 
     #Get the data
     train_loader, valid_loader = dataset_loader(args.dataset,
-        args.batch_size, device)
+        args.batch_size, device, train=True)
 
     logger = Logger('random', args.dataset, args)
     one_channel = args.dataset == 'mnist'

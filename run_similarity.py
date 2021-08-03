@@ -86,7 +86,7 @@ def main():
 
     #Get the data and initialize the model
     train_loader, valid_loader = dataset_loader(args.dataset,
-        args.batch_size, device)
+        args.batch_size, device, train=True)
 
     logger = Logger('similarity', args.dataset, args)
     one_channel = args.dataset == 'mnist'

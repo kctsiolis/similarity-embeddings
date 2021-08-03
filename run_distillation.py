@@ -54,7 +54,7 @@ def get_args(parser):
     parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--teacher-model', type=str, default='resnet18', 
-                        choices=['resnet18', 'resnet50_pretrained', 'simclr_pretrained'],
+                        choices=['resnet18', 'resnet50_pretrained', 'resnet50_pretrained_cifar', 'simclr_pretrained'],
                         help='Choice of student model.')
     parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 
                         'resnet50', 'cnn'],
@@ -79,7 +79,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     #Get the data
     train_loader, valid_loader = dataset_loader(args.dataset,
-        batch_size, device, distributed)
+        batch_size, device, train=True, distributed=distributed)
 
     logger = Logger('distillation', args.dataset, args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'
@@ -87,6 +87,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     teacher = get_model(args.teacher_model, load=True, load_path=args.load_path, 
         one_channel=one_channel, num_classes=num_classes, get_embedder=True)
+
     student = get_model(args.model, one_channel=one_channel, num_classes=num_classes,
         get_embedder=True)
     student.to(device)

@@ -86,12 +86,15 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
     change_epochs = []
 
     for epoch in range(1, epochs + 1):
-        train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, 
+        train_loss = train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, 
             log_interval, logger, rank, num_devices)
-        #train_loss, train_acc = predict(model, device, train_loader, loss_function, logger, "Train")
-        val_loss, val_acc = predict(model, device, valid_loader, loss_function, logger, "Validation")
+        val_loss, val_acc = predict(model, device, valid_loader, loss_function)
+        log_str = '\nTraining set: Average loss: {:.6f}\n'.format(train_loss)
+        log_str += 'Validation set: Average loss: {:.6f}, Accuracy: {:.2f}%\n'.format(
+            val_loss, val_acc)
+        logger.log(log_str)
 
-        #train_losses.append(train_loss)
+        train_losses.append(train_loss)
         #train_accs.append(train_acc)
         val_losses.append(val_loss)
         val_accs.append(val_acc)
@@ -195,12 +198,13 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
     change_epochs = []
 
     for epoch in range(1, epochs + 1):
-        train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
+        train_loss = train_distillation_epoch(student, teacher, device, train_loader, loss_function, 
             optimizer, epoch, log_interval, logger, cosine, rank, num_devices)
-        #train_loss = compute_distillation_loss(student, teacher, device, train_loader, 
-            #loss_function, cosine, logger, "Training")
         val_loss = compute_distillation_loss(student, teacher, device, valid_loader, 
-            loss_function, cosine, logger, "Validation")
+            loss_function, cosine)
+        log_str = '\nTraining set: Average loss: {:.6f}\n'.format(train_loss)
+        log_str += 'Validation set: Average loss: {:.6f}\n'.format(val_loss)
+        logger.log(log_str)
 
         #train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -223,13 +227,14 @@ def train_distillation(student: nn.Module, teacher: nn.Module,
                         torch.save(student.state_dict(), save_path)
                     logger.log("Model saved.\n")
 
-        scheduler.step(val_loss)
-
         if scheduler_choice == 'plateau':
+            scheduler.step(val_loss)
             if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
                 change_epochs.append(epoch)
                 lr = plateau_factor * lr
                 logger.log("Learning rate decreasing to {}\n".format(lr))
+        else:
+            scheduler.step()
 
     if rank == 0:
         train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
@@ -304,12 +309,14 @@ def train_similarity(model: nn.Module,
     change_epochs = []
 
     for epoch in range(1, epochs + 1):
-        train_similarity_epoch(model, device, train_loader, loss_function, 
+        train_loss = train_similarity_epoch(model, device, train_loader, loss_function, 
             optimizer, epoch, log_interval, logger, augmentation, alpha_max, beta, cosine, temp)
-        train_loss = compute_similarity_loss(model, device, train_loader, loss_function, 
-            augmentation, alpha_max, beta, cosine, temp, logger, "Train")
         val_loss = compute_similarity_loss(model, device, valid_loader, loss_function, 
-            augmentation, alpha_max, beta, cosine, temp, logger, "Validation")
+            augmentation, alpha_max, beta, cosine, temp)
+
+        log_str = 'Training set: Average loss: {:.6f}\n'.format(train_loss)
+        log_str += 'Validation set: Average loss: {:.6f}\n'.format(val_loss)
+        logger.log(log_str)
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
@@ -328,14 +335,15 @@ def train_similarity(model: nn.Module,
                 torch.save(model.state_dict(), save_path)
                 logger.log("Model saved.\n")
 
-        scheduler.step(val_loss)
-
         if scheduler_choice == 'plateau':
+            scheduler.step(val_loss)
             if optimizer.param_groups[0]['lr'] == plateau_factor * lr:
                 change_epochs.append(epoch)
                 lr = plateau_factor * lr
                 logger.log("Learning rate decreasing to {}\n".format(lr))
-
+        else:
+            scheduler.step()
+    
     train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
 
     return train_losses, val_losses
@@ -360,11 +368,13 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
     
     """
     model.train()
+    train_loss = AverageMeter()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
         loss = loss_function(output, target)
+        train_loss.update(loss.item())
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -372,6 +382,8 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
                 epoch, batch_idx * len(data), int(len(train_loader.dataset) / num_devices),
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
+
+    return train_loss.get_avg()
 
 def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
     device: torch.device, train_loader: torch.utils.data.DataLoader, 
@@ -397,11 +409,13 @@ def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
     """
     student.train()
     teacher.eval()
+    train_loss = AverageMeter()
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
         student_sims, teacher_sims = get_student_teacher_similarity(student, teacher, data, cosine)
         loss = loss_function(student_sims, teacher_sims)
+        train_loss.update(loss.item())
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -409,6 +423,8 @@ def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
                 epoch, batch_idx * len(data), int(len(train_loader.dataset) / num_devices),
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
+        
+    return train_loss.get_avg()
 
 #Epoch of similarity training
 def train_similarity_epoch(model: nn.Module, device: torch.device, 
@@ -435,6 +451,7 @@ def train_similarity_epoch(model: nn.Module, device: torch.device,
 
     """
     model.train()
+    train_loss = AverageMeter()
     for batch_idx, (data, _) in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
@@ -457,6 +474,7 @@ def train_similarity_epoch(model: nn.Module, device: torch.device,
             output = model_sims
 
         loss = loss_function(output, target)
+        train_loss.update(loss.item())
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -465,9 +483,10 @@ def train_similarity_epoch(model: nn.Module, device: torch.device,
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
 
+    return train_loss.get_avg()
+
 def predict(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
-    logger: Logger, subset: str) -> tuple([float, float]):
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module) -> tuple([float, float]):
     """Evaluate supervised model on data.
 
     Args:
@@ -475,30 +494,25 @@ def predict(model: nn.Module, device: torch.device,
         device: Device to evaluate on.
         loader: Data to evaluate on.
         loss_function: Loss function being used.
-        logger: Logger object which tracks model performance.
 
     Returns:
         Model loss and accuracy on the evaluation dataset.
     
     """
     model.eval()
-    losses = []
+    loss = 0
     correct = 0
     with torch.no_grad():
         for data, target in loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            losses.append(loss_function(output, target).item())
+            loss += loss_function(output, target).item()
             pred = output.argmax(dim=1, keepdim=True)
             correct += pred.eq(target.view_as(pred)).sum().item()
     
-    loss = np.mean(losses)
+    loss = loss / len(loader)
 
     acc = 100.00 * correct/ len(loader.dataset)
-
-    log_str = '\n{} set: Average loss: {:.6f}, Accuracy: {}/{} ({:.2f}%)\n'.format(subset,
-        loss, correct, len(loader.dataset), acc)
-    logger.log(log_str)
 
     return loss, acc
 
@@ -617,8 +631,7 @@ def get_model_probability(sims: torch.Tensor, temp: float = 1.0
 
 def compute_distillation_loss(student: nn.Module, teacher: nn.Module,
     device: torch.device, loader: torch.utils.data.DataLoader, 
-    loss_function: nn.Module, cosine: bool, logger: Logger, subset: str
-    ) -> float:
+    loss_function: nn.Module, cosine: bool) -> float:
     """Compute the distillation loss.
 
     Args:
@@ -628,8 +641,6 @@ def compute_distillation_loss(student: nn.Module, teacher: nn.Module,
         loader: The data the loss is computed on.
         loss_function: The loss function.
         cosine: Whether or not cosine similarity is being used.
-        logger: Logs the loss.
-        subset: Indicates which set the data belongs to (training or validation).
 
     Returns:
         The distillation loss.
@@ -637,17 +648,14 @@ def compute_distillation_loss(student: nn.Module, teacher: nn.Module,
     """
     student.eval()
     teacher.eval()
-    losses = []
+    loss = 0
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
             student_sims, teacher_sims = get_student_teacher_similarity(student, teacher, data, cosine)
-            losses.append(loss_function(student_sims, teacher_sims).item())
+            loss += loss_function(student_sims, teacher_sims).item()
 
-    loss = np.mean(losses)
-
-    log_str = '\n{} set: Average loss: {:.6f}\n'.format(subset, loss)
-    logger.log(log_str)
+    loss = loss / len(loader)
 
     return loss
 
@@ -667,15 +675,13 @@ def compute_similarity_loss(model: nn.Module, device: torch.device,
         beta: Parameter of similarity probability
         cosine: Whether or not cosine similarity is being used.
         temp: Temperature hyperparameter for sigmoid.
-        logger: Logs the loss.
-        subset: Indicates which set the data belongs to (training or validation).
 
     Returns:
         The similarity loss.
 
     """
     model.eval()
-    losses = []
+    loss = 0
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
@@ -693,12 +699,9 @@ def compute_similarity_loss(model: nn.Module, device: torch.device,
             else:
                 output = model_sims
                 
-            losses.append(loss_function(output, target).item())
+            loss += loss_function(output, target).item()
 
-    loss = np.mean(losses)
-
-    log_str = '\n{} set: Average loss: {:.6f}\n'.format(subset, loss)
-    logger.log(log_str)
+    loss = loss / len(loader)
 
     return loss
             
@@ -756,3 +759,26 @@ def train_plots(train_vals: list([float]), val_vals: list([float]),
     plt.xlabel('Epoch')
     plt.ylabel(y_label)
     plt.savefig(save_dir + '/' + y_label + '_plots')
+
+class AverageMeter():
+    """Computes and stores the average and current value
+    
+    Taken from the Torch examples repository:
+    https://github.com/pytorch/examples/blob/master/imagenet/main.py"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+    def get_avg(self):
+        return self.avg
