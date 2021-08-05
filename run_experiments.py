@@ -65,7 +65,9 @@ def get_args(parser):
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=[0.2], nargs='+',
                         help='Parameter of similarity probability function p(alpha).')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['cnn', 'resnet18', 'resnet50'],
+    parser.add_argument('--teacher-model', type=str, default='resnet18',
+                        help='Model to use for the teacher (if applicable).')
+    parser.add_argument('--model', type=str, default='resnet18',
                         help='Model to use for the learner.')
 
     args = parser.parse_args()
@@ -98,32 +100,38 @@ def make_script(args):
         if args.cosine:
             command_start += '--cosine '
 
+        if args.type == 'distillation':
+            command_start += '--teacher-model {} '.format(args.teacher_model)
+
         if args.type == 'similarity':
             command_start += '--augmentation {} '.format(args.augmentation)
 
-        for batch_size in args.batch_size:
-            command_batch = command_start + '--batch-size {} '.format(batch_size)
+        for seed in args.seed:
+            command_seed = command_start + '--seed {} '.format(seed)
 
-            for lr in args.lr:
-                command_lr = command_batch + '--lr {} '.format(lr)
+            for batch_size in args.batch_size:
+                command_batch = command_seed + '--batch-size {} '.format(batch_size)
 
-                for optimizer in args.optimizer:
-                    command_optim = command_lr + '--optimizer {} '.format(optimizer)
+                for lr in args.lr:
+                    command_lr = command_batch + '--lr {} '.format(lr)
 
-                    for scheduler in args.scheduler:
-                        command_sched = command_optim + '--scheduler {} '.format(scheduler)
+                    for optimizer in args.optimizer:
+                        command_optim = command_lr + '--optimizer {} '.format(optimizer)
 
-                        for seed in args.seed:
-                            command_seed = command_sched + '--seed {} '.format(seed)
+                        for scheduler in args.scheduler:
+                            command_sched = command_optim + '--scheduler {} '.format(scheduler)
 
                             if args.type == 'distillation' or args.type == 'linear_classifier':
-                                for load_path in args.load_path: 
-                                    command_load = command_seed + '--load-path {} '.format(load_path)
-                                    final_command = command_load + '\n'
-                                    f.write(final_command)
+                                if args.load_path is not None:
+                                    for load_path in args.load_path: 
+                                        command_load = command_sched + '--load-path {} '.format(load_path)
+                                        final_command = command_load + '\n'
+                                        f.write(final_command)
+                                else:
+                                    f.write(command_sched + '\n')
                             elif args.type == 'similarity':
                                 for loss in args.loss:
-                                    command_loss = command_seed + '--loss {} '.format(loss)
+                                    command_loss = command_sched + '--loss {} '.format(loss)
                                     for temp in args.temp:
                                         command_temp = command_loss + '--temp {} '.format(temp)
                                         for alpha_max in args.alpha_max:
@@ -133,7 +141,7 @@ def make_script(args):
                                                 final_command = command_beta + '\n'
                                                 f.write(final_command)
                             else:
-                                final_command = command_seed + '\n'
+                                final_command = command_sched + '\n'
                                 f.write(final_command)       
 
         print('Created file {}'.format(script_path))

@@ -54,10 +54,8 @@ def get_args(parser):
     parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--teacher-model', type=str, default='resnet18', 
-                        choices=['resnet18', 'resnet50_pretrained', 'resnet50_pretrained_cifar', 'simclr_pretrained'],
                         help='Choice of student model.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 
-                        'resnet50', 'cnn'],
+    parser.add_argument('--model', type=str, default='resnet18',
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')

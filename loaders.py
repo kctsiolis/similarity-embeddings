@@ -100,12 +100,12 @@ class TransformedDataset(Dataset):
     From https://discuss.pytorch.org/t/apply-different-transform-data-augmentation-to-train-and-validation/63580.
 
     Args:
-        dataset (torch.utils.data.Dataset): Original dataset.
+        dataset (Dataset): Original dataset.
         transform (transforms.Compose): Data augmentation to apply.
     
     """
 
-    def __init__(self, dataset: torch.utils.data.Dataset, 
+    def __init__(self, dataset: Dataset, 
         transform: transforms.Compose):
         """Instantiate object.
         
@@ -181,8 +181,8 @@ def cifar_loader(batch_size: int, device: torch.device,
         else:
             sampler = None
 
-        train_loader = torch.utils.data.DataLoader(train_transformed, sampler=sampler, **train_kwargs)
-        valid_loader = torch.utils.data.DataLoader(valid_transformed, **valid_kwargs)
+        train_loader = DataLoader(train_transformed, sampler=sampler, **train_kwargs)
+        valid_loader = DataLoader(valid_transformed, **valid_kwargs)
 
         return train_loader, valid_loader
     else:

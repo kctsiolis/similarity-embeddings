@@ -49,7 +49,7 @@ def get_args(parser):
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
                         help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
                             Can also specify multiple devices (separated by spaces) for multiprocessing.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18', 'resnet50', 'resnet152'],
+    parser.add_argument('--model', type=str, default='resnet18',
                         help='Choice of model.')
     args = parser.parse_args()
 

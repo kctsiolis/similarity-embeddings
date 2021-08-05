@@ -63,8 +63,6 @@ def main():
 
     loader1, loader2 = dataset_loader(args.dataset,
         args.batch_size, device, train=train)
-
-    logger = Logger('teacher', args.dataset, args, save=False)
             
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
@@ -74,11 +72,14 @@ def main():
     model.to(device)
 
     if args.split == 'train':
-        predict(model, device, loader1, nn.CrossEntropyLoss(), logger, 'Training')
+        loss, acc = predict(model, device, loader1, nn.CrossEntropyLoss())
     elif args.split == 'val':
-        predict(model, device, loader2, nn.CrossEntropyLoss(), logger, 'Validation')
+        loss, acc = predict(model, device, loader2, nn.CrossEntropyLoss())
     else:
-        predict(model, device, loader1, nn.CrossEntropyLoss(), logger, 'Test')
+        loss, acc = predict(model, device, loader1, nn.CrossEntropyLoss())
+
+    print('Loss: {:.6f}'.format(loss))
+    print('Accuracy: {:.2f}'.format(acc))
 
 if __name__ == '__main__':
     main()

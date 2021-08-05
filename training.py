@@ -78,22 +78,27 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
     #Keep track of losses and accuracies
     train_losses = []
     val_losses = []
+    train_accs = []
+    val_accs = []
     epochs_until_stop = early_stop
 
     #Keep track of changes in learning rate
     change_epochs = []
 
     for epoch in range(1, epochs + 1):
-        train_loss = train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, 
+        train_loss, train_acc = train_sup_epoch(model, device, train_loader, loss_function, optimizer, epoch, 
             log_interval, logger, rank, num_devices)
         val_loss, val_acc = predict(model, device, valid_loader, loss_function)
-        log_str = '\nTraining set: Average loss: {:.6f}\n'.format(train_loss)
+        log_str = '\nTraining set: Average loss: {:.6f}, Accuracy: {:.2f}%\n'.format(
+            train_loss, train_acc)
         log_str += 'Validation set: Average loss: {:.6f}, Accuracy: {:.2f}%\n'.format(
             val_loss, val_acc)
         logger.log(log_str)
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
+        train_accs.append(train_acc)
+        val_accs.append(val_acc)
 
         #Check if validation loss is worsening
         if val_loss > min(val_losses):
@@ -123,7 +128,8 @@ def train_sup(model: nn.Module, train_loader: torch.utils.data.DataLoader,
             scheduler.step()
             
     if rank == 0:
-        train_report(train_losses, val_losses, change_epochs=change_epochs, logger=logger)
+        train_report(train_losses, val_losses, train_accs, val_accs, 
+            change_epochs=change_epochs, logger=logger)
 
     return train_losses, val_losses
 
@@ -365,12 +371,15 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
     """
     model.train()
     train_loss = AverageMeter()
+    train_acc = AverageMeter()
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
         output = model(data)
         loss = loss_function(output, target)
+        acc = compute_accuracy(output, target)
         train_loss.update(loss.item())
+        train_acc.update(acc)
         loss.backward()
         optimizer.step()
         if batch_idx % log_interval == 0:
@@ -379,7 +388,7 @@ def train_sup_epoch(model: nn.Module, device: torch.device,
                 100. * batch_idx / len(train_loader), loss.item())
             logger.log(log_str)
 
-    return train_loss.get_avg()
+    return train_loss.get_avg(), train_acc.get_avg()
 
 def train_distillation_epoch(student: nn.Module, teacher: nn.Module,
     device: torch.device, train_loader: torch.utils.data.DataLoader, 
@@ -497,20 +506,24 @@ def predict(model: nn.Module, device: torch.device,
     """
     model.eval()
     loss = 0
-    correct = 0
+    acc = 0
     with torch.no_grad():
         for data, target in loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             loss += loss_function(output, target).item()
-            pred = output.argmax(dim=1, keepdim=True)
-            correct += pred.eq(target.view_as(pred)).sum().item()
+            acc += compute_accuracy(output, target)
     
-    loss = loss / len(loader)
-
-    acc = 100.00 * correct/ len(loader.dataset)
+    loss, acc = loss / len(loader), acc / len(loader)
 
     return loss, acc
+
+def compute_accuracy(output, target):
+    pred = output.argmax(dim=1, keepdim=True)
+    correct = pred.eq(target.view_as(pred)).sum().item()
+    acc = 100 * correct / output.shape[0]
+
+    return acc
 
 def get_embeddings(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, emb_dim: int

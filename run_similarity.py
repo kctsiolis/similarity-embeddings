@@ -52,7 +52,7 @@ def get_args(parser):
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--model', type=str, default='resnet18', choices=['resnet18'],
+    parser.add_argument('--model', type=str, default='resnet18',
                         help='Choice of model.')
     parser.add_argument('--loss', type=str, choices=['mse', 'kl'], default='mse',
                         help='Type of loss function to use.')
