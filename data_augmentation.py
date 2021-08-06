@@ -13,7 +13,7 @@ from torch.distributions import Categorical, RelaxedOneHotCategorical
 
 def gaussian_blur(data: torch.Tensor, alpha_max: float, 
     beta: float, device = torch.device, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor]):
+    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
     """Apply gaussian blur with randomly sampled sigma parameter.
 
     Sigma is sampled uniformly i.i.d. for each image in the data,
@@ -27,7 +27,7 @@ def gaussian_blur(data: torch.Tensor, alpha_max: float,
         random: If true, sample intensities i.i.d., otherwise use sigma_max.
 
     Returns:
-        The augmented data and the similarity probabilities.
+        The augmented data, the augmentation strengths, and the similarity probabilities.
 
     """
     if alpha_max <= 0:
@@ -36,22 +36,24 @@ def gaussian_blur(data: torch.Tensor, alpha_max: float,
     sigma_max = alpha_max * 5
 
     if random:
-        sigma = (torch.rand(data.shape[0])*sigma_max).to(device)
+        sigma = (torch.rand(data.shape[0])*(sigma_max-0.1) + 0.1).to(device)
     else:
         sigma = (torch.ones(data.shape[0])*sigma_max).to(device)
     img_size = min(data.shape[2], data.shape[3])
     #Kernel size must be odd
-    kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
+    #kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
+    k = img_size // 10
+    kernel_size = k if k % 2 == 1 else k - 1
     for i, image in enumerate(data):
         data[i,:,:,:] = transforms.GaussianBlur(kernel_size, sigma[i].item())(image)
 
     sim_prob = torch.exp(-beta * sigma)
 
-    return data, sim_prob
+    return data, sigma, sim_prob
 
 def color_jitter(data: torch.Tensor, alpha_max: float, 
     beta: float, device = torch.device, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor]):
+    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
     """Apply colour jitter data augmentation.
 
     Since colour jitter has four parameters (brightness, contrast,
@@ -67,7 +69,7 @@ def color_jitter(data: torch.Tensor, alpha_max: float,
         random: If true, sample intensities i.i.d. Otherwise, use alpha_max.
 
     Returns:
-        The augmented data with the similarity probabilities.
+        The augmented data with the augmentation strengths and similarity probabilities.
     
     """
 
@@ -83,25 +85,31 @@ def color_jitter(data: torch.Tensor, alpha_max: float,
     #     0.25, 0.25, 0.25, 0.25]))
     # m_sample = m.sample(sample_shape=torch.Size([num_samples]))
 
+    """
     pm = Categorical(torch.Tensor([0.5, 0.5]))
     pm_sample = pm.sample(sample_shape=torch.Size([num_samples, 3])) * 2 - 1
+    """
 
     for i, image in enumerate(data):
         # b, c, s, h = m_sample[i][0], m_sample[i][1], m_sample[i][2], m_sample[i][3]
         # b, c, s, h = b*a[i].item(), c*a[i].item(), s*a[i].item(), (h*a[i].item())/2
+        """"
         b = 1 + pm_sample[i][0]*a[i].item()
         c = 1 + pm_sample[i][1]*a[i].item()
         s = 1 + pm_sample[i][2]*a[i].item()
         h = a[i].item() / 2
         data[i,:,:,:] = transforms.ColorJitter((b,b), (c,c), (s,s), (h,h))(image)
+        """
+        w = a[i].item()
+        data[i,:,:,:] = transforms.ColorJitter(0.8*w, 0.8*w, 0.8*w, 0.2*w)(image)
 
     sim_prob = torch.exp(-beta * a)
 
-    return data, sim_prob
+    return data, a, sim_prob
 
 def random_crop(data: torch.Tensor, alpha_max: int,
     beta: float, device = torch.device, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor]):
+    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
     """Perform random crop augmentation on the input.
     
     Here, alpha controls the proportion of the image that is thrown
@@ -117,7 +125,7 @@ def random_crop(data: torch.Tensor, alpha_max: int,
         random: If true, sample intensities i.i.d. Otherwise, use alpha_max.
 
     Returns:
-        The augmented data with the similarity probabilities.
+        The augmented data with the augmentation strengths and similarity probabilities.
 
     """
     img_size = min(data.shape[2], data.shape[3])
@@ -134,11 +142,11 @@ def random_crop(data: torch.Tensor, alpha_max: int,
 
     sim_prob = torch.exp(-beta * (s / img_size))
 
-    return data, sim_prob
+    return data, s, sim_prob
 
 def augment(data: torch.Tensor, augmentation: str, device: torch.device, 
     alpha_max: float, beta: float, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor]):
+    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
     """Perform data augmentation on input.
 
     Args:

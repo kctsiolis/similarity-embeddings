@@ -463,7 +463,7 @@ def train_similarity_epoch(model: nn.Module, device: torch.device,
         
         #Get augmented data, target probabilities, and model probabilities
         with torch.no_grad():
-            augmented_data, target = augment(data, augmentation, device, alpha_max, beta)
+            augmented_data, _, target = augment(data, augmentation, device, alpha_max, beta)
         model_sims = get_model_similarity(model, data, augmented_data, cosine)
 
         if isinstance(loss_function, nn.KLDivLoss):
@@ -694,7 +694,7 @@ def compute_similarity_loss(model: nn.Module, device: torch.device,
     with torch.no_grad():
         for data, _ in loader:
             data = data.to(device)
-            augmented_data, target = augment(data, augmentation, device, alpha_max, beta)
+            augmented_data, _, target = augment(data, augmentation, device, alpha_max, beta)
             model_sims = get_model_similarity(model, data, augmented_data, cosine)
             if isinstance(loss_function, nn.KLDivLoss):
                 #KL Divergence expects output to be log probability distribution

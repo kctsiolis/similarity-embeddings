@@ -84,7 +84,7 @@ def collect_sims(model: nn.Module, loader: torch.utils.data.DataLoader,
     with torch.no_grad():
         for data, _ in tqdm(loader):
             data = data.to(device)
-            augmented_data, _ = augment(data, augmentation, device, alpha, 0.2, False)
+            augmented_data, _, _ = augment(data, augmentation, device, alpha, 0.2, False)
             model_sims += get_model_similarity(model, data, augmented_data, cosine).tolist()
 
     return model_sims

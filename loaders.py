@@ -9,11 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.datasets as datasets
 import yaml
 
-try:
-    config = open('config.yaml', 'r')
-except FileNotFoundError:
-    config = open('../config.yaml', 'r')
-
+config = open('config.yaml', 'r')
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 data_path = parsed_config['imagenet_path']
 
@@ -69,8 +65,9 @@ def imagenet_loader(batch_size: int, workers: int = 10,
     train_dataset = datasets.ImageFolder(
         traindir,
         transforms.Compose([
-            transforms.RandomResizedCrop(224),
-            transforms.RandomHorizontalFlip(),
+            #transforms.RandomResizedCrop(224),
+            #transforms.RandomHorizontalFlip(),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
         ]))
 
