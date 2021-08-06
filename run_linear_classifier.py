@@ -51,8 +51,7 @@ def get_args(parser):
                         help='Path to the distilled "student" model.')
     parser.add_argument('--device', type=str, default=["cpu"], nargs='+',
                         help='Name of CUDA device being used (if any). Otherwise will use CPU.')
-    parser.add_argument('--model', type=str, default='resnet18_embedder', choices=['cnn', 
-                        'resnet18_embedder', 'resnet50_embedder', 'resnet50_simclr'],
+    parser.add_argument('--model', type=str, default='resnet18_embedder',
                         help='Type of model for the embedder.')
     args = parser.parse_args()
 
@@ -81,7 +80,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         return ValueError('Path to the embedder is required.')
 
     embedder = get_model(args.model, load=True, load_path=args.load_path,
-        one_channel=one_channel, num_classes=num_classes, get_embedder=True)     
+        one_channel=one_channel, num_classes=num_classes, get_embedder=True)  
     model = Classifier(embedder, num_classes=num_classes)
     model.to(device)
     if distributed:

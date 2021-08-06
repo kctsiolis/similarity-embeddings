@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torchvision.models import resnet18, resnet50, resnet152
-from collections import OrderedDict
+import cifar_models
 
 class ResNet18(nn.Module):
     """Wrapper class for the ResNet18 model (imported from Torch).
@@ -215,7 +215,6 @@ class Classifier(nn.Module):
 
     def forward(self, x):
         x = self.embedder(x)
-        x = torch.flatten(x, 1)
         x = self.linear_layer(x)
 
         return x
@@ -301,6 +300,18 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         if get_embedder:
             model = Embedder(model, dim=64, batchnormalize=batchnormalize, 
                 track_running_stats=track_running_stats)
+    elif model_str == 'resnet50_cifar':
+        model = cifar_models.ResNet50()
+        if load:
+            model.load_state_dict(torch.load(load_path))
+        if get_embedder:
+            model = Embedder(model, dim=2048, batchnormalize=batchnormalize,
+                track_running_stats=track_running_stats)
+    elif model_str == 'resnet50_cifar_embedder':
+        model = Embedder(cifar_models.ResNet50(), dim=2048,
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats)
+        if load:
+            model.load_state_dict(torch.load(load_path))
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 

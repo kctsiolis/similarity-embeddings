@@ -57,8 +57,10 @@ def get_args(parser):
 
 def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
     device = torch.device(args.device[idx])
+    """
     if device.type == 'cuda':
         torch.cuda.set_device(device)
+    """
 
     if distributed:
         dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
