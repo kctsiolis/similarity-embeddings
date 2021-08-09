@@ -11,9 +11,25 @@ from torchvision import transforms
 import torch
 from torch.distributions import Categorical, RelaxedOneHotCategorical
 
+class Augmentation():
+
+    def __init__(self, alpha_min: float = 0, alpha_max: float = 1, 
+        beta: float = 1, random: bool = True, simclr: bool = False):
+        self.alpha_min = alpha_min
+        self.alpha_max = alpha_max
+        self.beta = beta
+        self.random = random
+
+class GaussianBlur(Augmentation):
+
+    def __init__(self, alpha_min: float = 0, alpha_max: float = 1, 
+        beta: float = 1, random: bool = True, simclr: bool = False):
+        super().__init__(alpha_min, alpha_max, beta, random, simclr)
+
+
 def gaussian_blur(data: torch.Tensor, alpha_max: float, 
-    beta: float, device = torch.device, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
+    beta: float, device = torch.device, random: bool = True,
+    simclr: bool = False) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
     """Apply gaussian blur with randomly sampled sigma parameter.
 
     Sigma is sampled uniformly i.i.d. for each image in the data,
@@ -52,8 +68,8 @@ def gaussian_blur(data: torch.Tensor, alpha_max: float,
     return data, sigma, sim_prob
 
 def color_jitter(data: torch.Tensor, alpha_max: float, 
-    beta: float, device = torch.device, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
+    beta: float, device = torch.device, random: bool = True,
+    simclr: bool = False) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
     """Apply colour jitter data augmentation.
 
     Since colour jitter has four parameters (brightness, contrast,

@@ -22,8 +22,8 @@ def get_args(parser):
                         help='Path to trained SimCLR model.')
     parser.add_argument('--save-path', type=str,
                         help='Path to save summary statistics.')
-    # parser.add_argument('--cosine', action='store_true',
-    #                     help='Use cosine similarity.')
+    parser.add_argument('--cosine', action='store_true',
+                         help='Use cosine similarity.')
 
     args = parser.parse_args()
 
@@ -61,7 +61,7 @@ def main():
             augmented_data, alpha_2, _ = augment(augmented_data, 'color-jitter', device, 1, 1, random=False)
             augmented_data = grayscale(augmented_data)
             augmented_data, alpha_3, _ = augment(augmented_data, 'blur', device, 0.4, 1, random=True)
-            sims = get_model_similarity(model, data, augmented_data, cosine=True)
+            sims = get_model_similarity(model, data, augmented_data, cosine=args.cosine)
 
             alpha_1 = torch.reshape(alpha_1, (args.batch_size, 1))
             alpha_2 = torch.reshape(alpha_2, (args.batch_size, 1))
