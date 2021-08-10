@@ -9,184 +9,166 @@ Augmentations supported:
 
 from torchvision import transforms
 import torch
-from torch.distributions import Categorical, RelaxedOneHotCategorical
+from torch.distributions import Categorical
 
 class Augmentation():
+    """Generic augmentation class. Parent class of the augmentations.
+    
+    Attributes:
+        alpha_min: Minimum augmentation strength.
+        alpha_max: Maximum augmentation strength.
+        device: Device to run on.
+        random: Whether or not to sample augmentation strengths randomly.
+        simclr: Whether or not to use SimCLR's sampling regime. If it is set to
+            true, then alpha_min, alpha_max, and random will be ignored.
 
-    def __init__(self, alpha_min: float = 0, alpha_max: float = 1, 
-        beta: float = 1, random: bool = True, simclr: bool = False):
+    """
+    def __init__(
+            self, alpha_min: float = 0, alpha_max: float = 1, 
+            device: torch.device = 'cpu', random: bool = True,
+            simclr: bool = False):
+        if alpha_min < 0 or alpha_max > 1:
+            raise ValueError('The range of alpha must be a subset of [0,1].')
         self.alpha_min = alpha_min
         self.alpha_max = alpha_max
-        self.beta = beta
+        self.device = device
         self.random = random
+        self.simclr = simclr
+
+    def augment(self, data: torch.Tensor):
+        """Perform data augmentation.
+        
+        Args:
+            data: The input to perform the augmentation on.
+
+        Returns:
+            The augmented data and the assoicated augmentation strengths.
+
+        """
+        batch_size = data.shape[0]
+        if self.random:
+            alpha = (torch.rand(
+                batch_size)*(self.alpha_max-self.alpha_min) + 
+                self.alpha_min).to(self.device)
+        else:
+            alpha = (torch.ones(batch_size)*self.alpha_max).to(self.device)
+
+        if self.simclr:
+            return self.apply_simclr_transform(data, alpha)
+        else:
+            return self.apply_transform(data, alpha)
+
+    def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        pass
+
+    def apply_simclr_transform(self, data: torch.Tensor):
+        pass
 
 class GaussianBlur(Augmentation):
 
-    def __init__(self, alpha_min: float = 0, alpha_max: float = 1, 
-        beta: float = 1, random: bool = True, simclr: bool = False):
-        super().__init__(alpha_min, alpha_max, beta, random, simclr)
+    def __init__(
+            self, alpha_min: float = 0, alpha_max: float = 1, 
+            kernel_size: int = None, device: torch.device = 'cpu',
+            random: bool = True, simclr: bool = False):
+        super().__init__(alpha_min, alpha_max, device, random, simclr)
+        if self.simclr:
+            self.alpha_min = 0.1
+            self.alpha_max = 2.0
+            self.kernel_size = None
+        else:
+            self.kernel_size = kernel_size
+
+    def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        if self.kernel_size is None:
+            img_size = min(data.shape[2], data.shape[3])
+            self.kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
+
+        sigma = alpha * 5
+        if self.simclr: 
+            for i, image in enumerate(data):
+                data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size)(image)
+        else:
+            for i, image in enumerate(data):
+                data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size, sigma[i].item())(image)
+
+        return data, alpha
+
+    def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        if self.kernel_size is None:
+            img_size = min(data.shape[2], data.shape[3])
+            k = img_size // 10
+            self.kernel_size = k if k % 2 == 1 else k - 1
+
+        for i, image in enumerate(data):
+            data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size, alpha[i].item())(image)
+
+        return data, alpha
+
+class ColorJitter(Augmentation):
+    def __init__(
+            self, alpha_min: float = 0, alpha_max: float = 1, 
+            device: torch.device = 'cpu', random: bool = True, 
+            simclr: bool = False):
+        super().__init__(alpha_min, alpha_max, device, random, simclr)
+
+    def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        # m = RelaxedOneHotCategorical(torch.Tensor([1.0]), torch.Tensor([
+        #     0.25, 0.25, 0.25, 0.25]))
+        # m_sample = m.sample(sample_shape=torch.Size([num_samples]))
+        pm = Categorical(torch.Tensor[0.5, 0.5])
+        pm_sample = pm.sample(sample_shape=torch.Size([data.shape[0], 3])) * 2 - 1
+        for i, image in enumerate(data):
+            # b, c, s, h = m_sample[i][0], m_sample[i][1], m_sample[i][2], m_sample[i][3]
+            # b, c, s, h = b*a[i].item(), c*a[i].item(), s*a[i].item(), (h*a[i].item())/2
+            b = 1 + pm_sample[i][0]*alpha[i].item()
+            c = 1 + pm_sample[i][1]*alpha[i].item()
+            s = 1 + pm_sample[i][2]*alpha[i].item()
+            h = alpha[i].item() / 2
+            data[i,:,:,:] = transforms.ColorJitter((b,b), (c,c), (s,s), (h,h))(image)
+
+        return data, alpha
+
+    def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        for i, image in enumerate(data):
+                data[i,:,:,:] = transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)(image)
+
+        return data, None
 
 
-def gaussian_blur(data: torch.Tensor, alpha_max: float, 
-    beta: float, device = torch.device, random: bool = True,
-    simclr: bool = False) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
-    """Apply gaussian blur with randomly sampled sigma parameter.
+class RandomCrop(Augmentation):
+    def __init__(
+            self, alpha_min: float = 0, alpha_max: float = 1, 
+            device: torch.device = 'cpu', random: bool = True, 
+            simclr: bool = False):
+        super().__init__(alpha_min, alpha_max, device, random, simclr)
+        if simclr:
+            self.alpha_min = 0.08
+            self.alpha_max = 1.0
 
-    Sigma is sampled uniformly i.i.d. for each image in the data,
-    while the kernel size is fixed to be as large as possible.
+    def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        for i, image in enumerate(data):
+            sz = 1 - alpha[i].item()
+            data[i,:,:,:] = transforms.RandomResizedCrop(size=image.shape[-2:], scale=(sz,sz))(image)
 
-    Args:
-        data: Input data to be augmented.
-        alpha_max: Largest possible augmentation intensity.
-        beta: Similiarity probability parameter.
-        device: Device on which to store batch.
-        random: If true, sample intensities i.i.d., otherwise use sigma_max.
+        return data, alpha
 
-    Returns:
-        The augmented data, the augmentation strengths, and the similarity probabilities.
+    def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        return self.apply_transform(data, alpha)
 
-    """
-    if alpha_max <= 0:
-        raise ValueError("Maximum standard deviation must be positive.")
-
-    sigma_max = alpha_max * 5
-
-    if random:
-        sigma = (torch.rand(data.shape[0])*(sigma_max-0.1) + 0.1).to(device)
-    else:
-        sigma = (torch.ones(data.shape[0])*sigma_max).to(device)
-    img_size = min(data.shape[2], data.shape[3])
-    #Kernel size must be odd
-    #kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
-    k = img_size // 10
-    kernel_size = k if k % 2 == 1 else k - 1
-    for i, image in enumerate(data):
-        data[i,:,:,:] = transforms.GaussianBlur(kernel_size, sigma[i].item())(image)
-
-    sim_prob = torch.exp(-beta * sigma)
-
-    return data, sigma, sim_prob
-
-def color_jitter(data: torch.Tensor, alpha_max: float, 
-    beta: float, device = torch.device, random: bool = True,
-    simclr: bool = False) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
-    """Apply colour jitter data augmentation.
-
-    Since colour jitter has four parameters (brightness, contrast,
-    saturation, and hue), the augmentation strength alpha represents
-    the sum of these. We sample from the relaxed categorical distribution
-    to weigh each of the four parameters and then multiply by alpha.
-
-    Args:
-        data: Input data to be augmented.
-        alpha_max: Maximum augmentation strength.
-        beta: Similarity probability parameter.
-        device: Device on which to store batch.
-        random: If true, sample intensities i.i.d. Otherwise, use alpha_max.
-
-    Returns:
-        The augmented data with the augmentation strengths and similarity probabilities.
-    
-    """
-
-    num_samples = data.shape[0]
-    if alpha_max < 0 or alpha_max > 1:
-        raise ValueError("Maximum augmentation strength must be in [0,1].")
-    if random:
-        a = (torch.rand(num_samples)*alpha_max).to(device)
-    else:
-        a = (torch.ones(num_samples)*alpha_max).to(device)
-
-    # m = RelaxedOneHotCategorical(torch.Tensor([1.0]), torch.Tensor([
-    #     0.25, 0.25, 0.25, 0.25]))
-    # m_sample = m.sample(sample_shape=torch.Size([num_samples]))
-
-    """
-    pm = Categorical(torch.Tensor([0.5, 0.5]))
-    pm_sample = pm.sample(sample_shape=torch.Size([num_samples, 3])) * 2 - 1
-    """
-
-    for i, image in enumerate(data):
-        # b, c, s, h = m_sample[i][0], m_sample[i][1], m_sample[i][2], m_sample[i][3]
-        # b, c, s, h = b*a[i].item(), c*a[i].item(), s*a[i].item(), (h*a[i].item())/2
-        """"
-        b = 1 + pm_sample[i][0]*a[i].item()
-        c = 1 + pm_sample[i][1]*a[i].item()
-        s = 1 + pm_sample[i][2]*a[i].item()
-        h = a[i].item() / 2
-        data[i,:,:,:] = transforms.ColorJitter((b,b), (c,c), (s,s), (h,h))(image)
-        """
-        w = a[i].item()
-        data[i,:,:,:] = transforms.ColorJitter(0.8*w, 0.8*w, 0.8*w, 0.2*w)(image)
-
-    sim_prob = torch.exp(-beta * a)
-
-    return data, a, sim_prob
-
-def random_crop(data: torch.Tensor, alpha_max: int,
-    beta: float, device = torch.device, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
-    """Perform random crop augmentation on the input.
-    
-    Here, alpha controls the proportion of the image that is thrown
-    away in the crop. For example, alpha = 0 retains the entire image,
-    while alpha = 0.5 retains half the image. In all cases, a random
-    portion of the image is chosen for the crop.
-
-    Args:
-        data: Input data to be augmented.
-        alpha_max: Maximum augmentation strength.
-        beta: Similarity probability parameter.
-        device: Device on which to store batch.
-        random: If true, sample intensities i.i.d. Otherwise, use alpha_max.
-
-    Returns:
-        The augmented data with the augmentation strengths and similarity probabilities.
-
-    """
-    img_size = min(data.shape[2], data.shape[3])
-    if alpha_max >= 1 or alpha_max < 0:
-        raise ValueError("Maximum augmentation strength must be in [0,1).")
-    if random:
-        s = (torch.rand(data.shape[0])*alpha_max).to(device)
-    else:
-        s = (torch.ones(data.shape[0])*alpha_max).to(device)
-    
-    for i, image in enumerate(data):
-        sz = 1 - s[i].item()
-        data[i,:,:,:] = transforms.RandomResizedCrop(size=image.shape[-2:], scale=(sz,sz))(image)
-
-    sim_prob = torch.exp(-beta * (s / img_size))
-
-    return data, s, sim_prob
-
-def augment(data: torch.Tensor, augmentation: str, device: torch.device, 
-    alpha_max: float, beta: float, random: bool = True
-    ) -> tuple([torch.Tensor, torch.Tensor, torch.Tensor]):
-    """Perform data augmentation on input.
-
-    Args:
-        data: The input data to be augmented.
-        augmentation: The augmentation to perform.
-        device: The device to store data on during augmentation.
-        alpha_max: Largest possible augmentation intensity.
-        beta: Similarity probability parameter.
-        random: Whether or not intensities are sampled i.i.d.
-
-    Returns:
-        The augmented data and the similarity probabilities.
-
-    Raises:
-        NotImplementedError: Only Gaussian blur, colour jitter, and random crop are implemented.
-
-    """
-    #Sample an augmentation strength for each instance in the batch
-    augmented_data = data.detach().clone()
+def make_augmentation(
+        augmentation: str, alpha_min: float = 0, alpha_max: float = 1, 
+        kernel_size: int = 223, device: torch.device = 'cpu', 
+        random: bool = True, simclr: bool = False):
+    """Instantiate an augmentation."""
     if augmentation == 'blur':
-        return gaussian_blur(augmented_data, alpha_max, beta, device, random)
-    elif augmentation == 'color-jitter':
-        return color_jitter(augmented_data, alpha_max, beta, device, random)
-    elif augmentation == 'random-crop':
-        return random_crop(augmented_data, alpha_max, beta, device, random)
+        return GaussianBlur(
+            alpha_min, alpha_max, kernel_size, device, random, simclr
+        )
+    elif augmentation == 'jitter':
+        return ColorJitter(
+            alpha_min, alpha_max, device, random, simclr
+        )
     else:
-        raise NotImplementedError
+        return RandomCrop(
+            alpha_min, alpha_max, device, random, simclr
+        )

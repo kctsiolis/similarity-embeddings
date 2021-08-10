@@ -34,20 +34,18 @@ class Logger:
 
     """
 
-    def __init__(self, type, dataset: str, args: Namespace, 
+    def __init__(self, args: Namespace, 
         save: bool = True, verbose: bool = True):
         """Instantiate logger object.
 
         Args:
-            type: Type of experiment (teacher, distillation, similarity, random, linear_classifier).
-            dataset: Dataset being used (MNIST, CIFAR, or ImageNet).
             args: Command line arguments used to run experiment.
             verbose: Whether or not to print logger info to stdout.
 
         """
         self.verbose = verbose
         if save:
-            self.dir = make_log_dir(type, dataset, args)
+            self.dir = make_log_dir(args)
             os.mkdir(self.dir)
             self.log_path = os.path.join(self.dir, 'log.txt')
             self.results_path = os.path.join(self.dir, 'results.txt')
@@ -56,26 +54,25 @@ class Logger:
             os.mkdir(self.plots_dir)
             self.log_file = open(self.log_path, 'w')
             self.results_file = open(self.results_path, 'w')
-            self.make_header(type, args)
+            self.make_header(args)
         else:
             self.log_file = None
             self.results_file = None
             self.model_path = None
 
-    def make_header(self, type: str, args: Namespace) -> None:
+    def make_header(self, args: Namespace) -> None:
         """Start the log with a header giving general experiment info.
 
         Args:
-            type: Type of experiment being run.
             args: Command line arguments used when running experiment.
 
         """
         self.log('Experiment Time: {}'.format(datetime.now()))
-        self.log('Type: {}'.format(type))
+        self.log('Mode: {}'.format(args.mode))
         self.log('Dataset: {}'.format(args.dataset))
-        if type == 'teacher' or type == 'linear_classifier' or type == 'random':
+        if args.mode == 'teacher' or args.mode == 'linear_classifier' or args.mode == 'random':
             self.log('Loss Function: Cross Entropy')
-        elif type == 'distillation':
+        elif args.mode == 'distillation':
             self.log('Loss Function: MSE')
         else:
             self.log('Loss Function: {}'.format(args.loss))
@@ -89,11 +86,11 @@ class Logger:
         self.log('Early Stopping Patience: {}'.format(args.early_stop))
         self.log('Device: {}'.format(args.device))
         self.log('Model: {}'.format(args.model))
-        if type == 'distillation' or type == 'linear_classifier':
+        if args.mode == 'distillation' or args.mode == 'linear_classifier':
            self.log('Load Path: {}'.format(args.load_path))
-        if type == 'similarity' or type == 'distillation':
+        if args.mode == 'similarity' or args.mode == 'distillation':
             self.log('Cosine Similarity: {}'.format(args.cosine))
-        if type == 'similarity':
+        if args.mode == 'similarity':
             if args.loss == 'kl':
                 self.log('Temp: {}'.format(args.temp))
             self.log('Augmentation: {}'.format(args.augmentation))
@@ -130,21 +127,19 @@ class Logger:
     def get_plots_dir(self):
         return self.plots_dir
 
-def make_log_dir(type: str, dataset: str, args: Namespace) -> None:
+def make_log_dir(args: Namespace) -> None:
     """Create directory to store log, results file, model, and plots.
 
     Args:
-        type: Type of experiment.
-        dataset: Dataset used for experiments.
         args: Command line arguments used to run experiment.
 
     """
 
-    exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(type, dataset,
-        args.batch_size, args.lr, args.optimizer, args.seed, args.model)
-    if type == 'similarity' or type == 'distillation':
+    exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(
+        args.mode, args.dataset, args.batch_size, args.lr, args.optimizer, args.seed, args.model)
+    if args.mode == 'similarity' or args.mode == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
-    if type == 'similarity':
+    if args.mode == 'similarity':
         exp_name_loss = exp_name_cosine + '_loss={}'.format(args.loss)
         exp_name_augmentation = exp_name_loss + '_augmentation={}'.format(args.augmentation)
         exp_name_alphamax = exp_name_augmentation + '_alphamax={}'.format(args.alpha_max)
@@ -154,7 +149,7 @@ def make_log_dir(type: str, dataset: str, args: Namespace) -> None:
             dir = os.path.join(LOGS_DIR, exp_name_temp)
         else:
             dir = os.path.join(LOGS_DIR, exp_name_beta)
-    elif type == 'distillation':
+    elif args.mode == 'distillation':
         dir = os.path.join(LOGS_DIR, exp_name_cosine)
     else:
         dir = os.path.join(LOGS_DIR, exp_name_start)

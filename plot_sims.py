@@ -18,7 +18,7 @@ import numpy as np
 import torch
 from torch import nn
 from matplotlib import pyplot as plt
-from data_augmentation import augment
+from data_augmentation import make_augmentation
 from embeddings import normalize_embeddings
 from training import get_model_similarity, get_embeddings
 from models import get_model
@@ -84,7 +84,7 @@ def collect_sims(model: nn.Module, loader: torch.utils.data.DataLoader,
     with torch.no_grad():
         for data, _ in tqdm(loader):
             data = data.to(device)
-            augmented_data, _, _ = augment(data, augmentation, device, alpha, 0.2, False)
+            augmented_data, _ = augmentation.augment(data)
             model_sims += get_model_similarity(model, data, augmented_data, cosine).tolist()
 
     return model_sims
@@ -225,7 +225,9 @@ def main():
         means = []
         stds = []
         for a in args.alpha:
-            model_sims = collect_sims(model, valid_loader, args.augmentation,
+            augmentation = make_augmentation(
+                args.augmentation, alpha_max=args.alpha_max, device=device, random=False)
+            model_sims = collect_sims(model, valid_loader, augmentation,
                 device, a, args.cosine)
             print('alpha = {}'.format(a))
             _, _, mean, std, _, _, _, _, _, _ = summary(model_sims)

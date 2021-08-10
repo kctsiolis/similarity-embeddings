@@ -1,9 +1,9 @@
 """Evaluate a model on a classification task.
 
 Models supported:
-    ResNet18 (imported from PyTorch)
-    ResNet50 (imported from PyTorch)
-    ResNet152 (imported from PyTorch)
+    ResNet18
+    ResNet50
+    ResNet152
 
 Datasets supported:
     MNIST
@@ -20,7 +20,6 @@ from torch.utils import data
 from models import get_model
 from loaders import dataset_loader
 from training import predict
-from logger import Logger
 
 def get_args(parser):
     """Collect command line arguments."""

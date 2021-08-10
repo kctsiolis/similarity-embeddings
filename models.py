@@ -238,47 +238,26 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         The desired model.
     
     """
+    checkpointing = False
+
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
-        if load:
-            model.load_state_dict(torch.load(load_path))
-        if get_embedder:
-            model = Embedder(model, batchnormalize=batchnormalize,
-                track_running_stats=track_running_stats)
     elif model_str == 'resnet50':
         model = ResNet50(one_channel=one_channel, num_classes=num_classes)
-        if load:
-            model.load_state_dict(torch.load(load_path))
-        if get_embedder:
-            model = Embedder(model, batchnormalize=batchnormalize,
-                track_running_stats=track_running_stats)
     elif model_str == 'resnet152':
         model = ResNet152(one_channel=one_channel, num_classes=num_classes)
-        if load:
-            model.load_state_dict(torch.load(load_path))
-        if get_embedder:
-            model = Embedder(model, batchnormalize=batchnormalize,
-                track_running_stats=track_running_stats)
     elif model_str == 'resnet18_embedder':
         model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes), 
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
-        if load:
-            model.load_state_dict(torch.load(load_path))
     elif model_str == 'resnet50_embedder':
         model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes), 
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
-        if load:
-            model.load_state_dict(torch.load(load_path, map_location='cpu'))
     elif model_str == 'resnet50_classifier':
         model = Classifier(Embedder(ResNet50(one_channel=one_channel,
             num_classes=num_classes), batchnormalize=batchnormalize, 
             track_running_stats=track_running_stats))
-        if load:
-            model.load_state_dict(torch.load(load_path, map_location='cpu'))
     elif model_str == 'convnet_embedder':
         model = ConvNetEmbedder(one_channel=one_channel)
-        if load:
-            model.load_state_dict(torch.load(load_path))
     elif model_str == 'resnet18_pretrained':
         model = ResNet18(one_channel=one_channel, pretrained=True)
         if get_embedder:
@@ -289,31 +268,29 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             model = Embedder(model)
     elif model_str == 'simclr_pretrained':
         assert load == True
+        checkpointing = True
         checkpoint = torch.load(load_path)
         model = ResNet50(num_classes=1000)
-        model.model.load_state_dict(checkpoint['state_dict'])
-        if get_embedder:
-            model = Embedder(model, batchnormalize=batchnormalize, 
-                track_running_stats=track_running_stats)
-    elif model_str == 'resnet50_pretrained_cifar':
-        model = torch.hub.load("chenyaofo/pytorch-cifar-models", "cifar10_resnet56", pretrained=True)
-        if get_embedder:
-            model = Embedder(model, dim=64, batchnormalize=batchnormalize, 
-                track_running_stats=track_running_stats)
     elif model_str == 'resnet50_cifar':
         model = cifar_models.ResNet50()
-        if load:
-            model.load_state_dict(torch.load(load_path))
-        if get_embedder:
-            model = Embedder(model, dim=2048, batchnormalize=batchnormalize,
-                track_running_stats=track_running_stats)
+        dim = 2048
     elif model_str == 'resnet50_cifar_embedder':
         model = Embedder(cifar_models.ResNet50(), dim=2048,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
-        if load:
-            model.load_state_dict(torch.load(load_path))
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
+
+    if load:
+        if checkpointing:
+            try:
+                model.model.load_state_dict(checkpoint['state_dict'])
+            except AttributeError:
+                model.load_state_dict(checkpoint['state_dict'])
+        else:
+            model.load_state_dict(torch.load(load_path))
+    if get_embedder:
+        model = Embedder(model, dim=dim, batchnormalize=batchnormalize,
+            track_running_stats=track_running_stats)
 
     return model
 

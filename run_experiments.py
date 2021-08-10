@@ -5,7 +5,7 @@ and temperature, a list can be entered. For each combination of
 hyperparameters, a command is added to the bash script to train with this
 hyperparameter configuration.
 
-Experiment types supported:
+Experiment modes supported:
     Teacher
     Distillation
     Random
@@ -28,7 +28,7 @@ def get_args(parser):
         help='Directory to store bash script containing code to run experiments.')
     parser.add_argument('--code-dir', type=str, default='..',
         help='Directory that code is located in (relative to the script directory).')
-    parser.add_argument('--type', type=str, choices=['teacher', 'distillation', 'similarity', 
+    parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'similarity', 
         'linear_classifier', 'random'], metavar='T',
         help='The type of training.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
@@ -61,6 +61,8 @@ def get_args(parser):
                         help='Temperature in sigmoid function converting similarity score to probability.')
     parser.add_argument('--augmentation', type=str, choices=['blur', 'color-jitter', 'random-crop'], default='blur',
                         help='Augmentation to use (if applicable).')
+    parser.add_argument('--kernel-size', type=int, default=None,
+                        help='Kernel size parameter for Gaussian blur.')
     parser.add_argument('--alpha-max', type=int, default=[15], nargs='+',
                         help='Largest possible augmentation strength.')
     parser.add_argument('--beta', type=float, default=[0.2], nargs='+',
@@ -80,17 +82,8 @@ def make_script(args):
     command_start = 'python {}/'.format(args.code_dir)
 
     with open(script_path, 'w') as f:
-        if args.type == 'teacher':
-            command_start += 'run_teacher.py '
-        elif args.type == 'distillation':
-            command_start += 'run_distillation.py '
-        elif args.type == 'similarity':
-            command_start += 'run_similarity.py '
-        elif args.type == 'linear_classifier':
-            command_start += 'run_linear_classifier.py '
-        else:
-            command_start += 'run_random.py '
-
+        command_start += 'run_training.py'
+        command_start += '--mode {} '.format(args.mode)
         command_start += '--dataset {} '.format(args.dataset)
         command_start += '--epochs {} '.format(args.epochs)
         command_start += '--patience {} '.format(args.patience)
@@ -100,10 +93,10 @@ def make_script(args):
         if args.cosine:
             command_start += '--cosine '
 
-        if args.type == 'distillation':
+        if args.mode == 'distillation':
             command_start += '--teacher-model {} '.format(args.teacher_model)
 
-        if args.type == 'similarity':
+        if args.mode == 'similarity':
             command_start += '--augmentation {} '.format(args.augmentation)
 
         for seed in args.seed:
@@ -121,7 +114,7 @@ def make_script(args):
                         for scheduler in args.scheduler:
                             command_sched = command_optim + '--scheduler {} '.format(scheduler)
 
-                            if args.type == 'distillation' or args.type == 'linear_classifier':
+                            if args.mode == 'distillation' or args.mode == 'linear_classifier':
                                 if args.load_path is not None:
                                     for load_path in args.load_path: 
                                         command_load = command_sched + '--load-path {} '.format(load_path)
@@ -129,7 +122,7 @@ def make_script(args):
                                         f.write(final_command)
                                 else:
                                     f.write(command_sched + '\n')
-                            elif args.type == 'similarity':
+                            elif args.mode == 'similarity':
                                 for loss in args.loss:
                                     command_loss = command_sched + '--loss {} '.format(loss)
                                     for temp in args.temp:
@@ -138,7 +131,8 @@ def make_script(args):
                                             command_alpha = command_temp + '--alpha-max {} '.format(alpha_max)
                                             for beta in args.beta:
                                                 command_beta = command_alpha + '--beta {} '.format(beta)
-                                                final_command = command_beta + '\n'
+                                                command_kernel = command_beta + '--kernel-size {} '.format(args.kernel_size)
+                                                final_command = command_kernel + '\n'
                                                 f.write(final_command)
                             else:
                                 final_command = command_sched + '\n'
