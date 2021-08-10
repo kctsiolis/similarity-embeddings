@@ -271,11 +271,19 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         checkpointing = True
         checkpoint = torch.load(load_path)
         model = ResNet50(num_classes=1000)
+    elif model_str == 'resnet18_cifar':
+        model = cifar_models.ResNet18()
+        dim = 512
+    elif model_str == 'resnet18_cifar_embedder':
+        model = Embedder(
+            cifar_models.ResNet18(), dim=512,
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats)
     elif model_str == 'resnet50_cifar':
         model = cifar_models.ResNet50()
         dim = 2048
     elif model_str == 'resnet50_cifar_embedder':
-        model = Embedder(cifar_models.ResNet50(), dim=2048,
+        model = Embedder(
+            cifar_models.ResNet50(), dim=2048,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
     else:
         raise ValueError('Model {} not defined.'.format(model_str))

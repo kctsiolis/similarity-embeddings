@@ -34,7 +34,7 @@ class Trainer():
             rank: int = 0, num_devices: int = 1):
         self.model = model
         self.train_loader = train_loader
-        self.valid_loader = val_loader
+        self.val_loader = val_loader
         self.device = device
         if loss_function == 'cross-entropy':
             self.loss_function = nn.CrossEntropyLoss()
@@ -233,13 +233,14 @@ class DistillationTrainer(Trainer):
                 log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
                     epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
                     100. * batch_idx / len(self.train_loader), loss.item())
-            self.logger.log(log_str)
+                self.logger.log(log_str)
         
         return train_loss.get_avg(), None
 
     def validate(self):
         return compute_distillation_loss(
-            self.model, self.teacher. self.device, self.val_loader), None
+            self.model, self.teacher, self.device, self.val_loader, 
+            self.loss_function, self.cosine), None
 
 class SimilarityTrainer(Trainer):
     def __init__(
@@ -322,7 +323,7 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
         return DistillationTrainer(
             model, teacher_model, train_loader, val_loader, device,
             logger, loss_function, epochs, lr, optim_str, sched_str,
-            patience, early_stop, log_interval, rank,  num_devices,
+            patience, early_stop, log_interval, rank, num_devices,
             cosine)
     else:
         return SimilarityTrainer(

@@ -58,6 +58,8 @@ def get_args(parser):
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
                         help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
                             Can also specify multiple devices (separated by spaces) for multiprocessing.')
+    parser.add_argument('--load-path', type=str,
+                        help='Path to the teacher model.')
     parser.add_argument('--teacher-model', type=str, default=None,
                         help='Choice of teacher model (for distillation only).')
     parser.add_argument('--model', type=str, 
@@ -117,6 +119,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
             one_channel=one_channel, num_classes=num_classes, 
             get_embedder=True) 
         teacher.to(device)
+    else:
+        teacher = None
 
     if distributed:
         model = DistributedDataParallel(model, device_ids=[device])
@@ -125,9 +129,9 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     trainer = get_trainer(
         args.mode, model, train_loader, val_loader, device, logger, 
-        args.loss, args.epochs, args.lr, args.optim_str, args.sched_str,
-        args.patience, args.early_stop, args.log_interval, args.rank,
-        args.num_devices, args.teacher_model, args.cosine, args.augmentation,
+        args.loss, args.epochs, args.lr, args.optimizer, args.scheduler,
+        args.patience, args.early_stop, args.log_interval, idx,
+        num_gpus, teacher, args.cosine, args.augmentation,
         args.alpha_max, args.kernel_size, args.beta, args.temp)
 
     trainer.train()

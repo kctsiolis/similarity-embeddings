@@ -86,6 +86,8 @@ class Logger:
         self.log('Early Stopping Patience: {}'.format(args.early_stop))
         self.log('Device: {}'.format(args.device))
         self.log('Model: {}'.format(args.model))
+        if args.mode == 'distillation':
+            self.log('Teacher Model: {}'.format(args.teacher_model))
         if args.mode == 'distillation' or args.mode == 'linear_classifier':
            self.log('Load Path: {}'.format(args.load_path))
         if args.mode == 'similarity' or args.mode == 'distillation':

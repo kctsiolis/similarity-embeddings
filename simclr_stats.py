@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from loaders import dataset_loader
 from models import get_model
-from data_augmentation import augment
+from data_augmentation import make_augmentation
 from training import get_model_similarity
 
 def get_args(parser):
@@ -55,12 +55,15 @@ def main():
 
     for data, _ in tqdm(train_loader):
         data = data.to(device)
+        crop = make_augmentation('crop', simclr=True)
+        blur = make_augmentation('blur', simclr=True)
+        jitter = make_augmentation('jitter', simclr=True)
         with torch.no_grad():
-            augmented_data, alpha_1, _ = augment(data, 'random-crop', device, 0.92, 1, random=True)
+            augmented_data, alpha_1 = crop.augment(data)
             augmented_data = flip(augmented_data)
-            augmented_data, alpha_2, _ = augment(augmented_data, 'color-jitter', device, 1, 1, random=False)
+            augmented_data, alpha_2 = jitter.augment(augmented_data)
             augmented_data = grayscale(augmented_data)
-            augmented_data, alpha_3, _ = augment(augmented_data, 'blur', device, 0.4, 1, random=True)
+            augmented_data, alpha_3, _ = blur.augment(augmented_data)
             sims = get_model_similarity(model, data, augmented_data, cosine=args.cosine)
 
             alpha_1 = torch.reshape(alpha_1, (args.batch_size, 1))
