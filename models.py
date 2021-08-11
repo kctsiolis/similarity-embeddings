@@ -242,10 +242,13 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
 
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
+        dim = 512
     elif model_str == 'resnet50':
         model = ResNet50(one_channel=one_channel, num_classes=num_classes)
+        dim = 2048
     elif model_str == 'resnet152':
         model = ResNet152(one_channel=one_channel, num_classes=num_classes)
+        dim = 2048
     elif model_str == 'resnet18_embedder':
         model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes), 
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
@@ -259,13 +262,13 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'convnet_embedder':
         model = ConvNetEmbedder(one_channel=one_channel)
     elif model_str == 'resnet18_pretrained':
+        load = False
         model = ResNet18(one_channel=one_channel, pretrained=True)
-        if get_embedder:
-            model = Embedder(model)
+        dim = 512
     elif model_str == 'resnet50_pretrained':
+        load = False
         model = ResNet50(one_channel=one_channel, pretrained=True)
-        if get_embedder:
-            model = Embedder(model)
+        dim = 2048
     elif model_str == 'simclr_pretrained':
         assert load == True
         checkpointing = True

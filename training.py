@@ -52,7 +52,7 @@ class Trainer():
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
         elif optim_str == 'sgd':
             self.optimizer = optim.SGD(
-                model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+                self.model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
         else:
             raise ValueError('Only Adam and SGD optimizers are supported.')
 
@@ -87,9 +87,9 @@ class Trainer():
             train_loss)
             if train_acc is not None:
                 log_str += 'Training set: Average accuracy: {:.2f}%\n'.format(train_acc)
-            log_str += 'Validation set: Average loss: {:.6f}\n'.format(val_loss)
+            log_str += '\nValidation set: Average loss: {:.6f}\n'.format(val_loss)
             if val_acc is not None:
-                log_str += 'Validation set: Accuracy: {:.2f}\n'.format(val_acc)
+                log_str += 'Validation set: Accuracy: {:.2f}%\n'.format(val_acc)
             
             self.logger.log(log_str)
 
@@ -360,9 +360,10 @@ def predict(model: nn.Module, device: torch.device,
     return loss, acc
 
 def compute_accuracy(output, target):
-    pred = output.argmax(dim=1, keepdim=True)
-    correct = pred.eq(target.view_as(pred)).sum().item()
-    acc = 100 * correct / output.shape[0]
+    with torch.no_grad():
+        pred = output.argmax(dim=1, keepdim=True)
+        correct = pred.eq(target.view_as(pred)).sum().item()
+        acc = 100 * correct / output.shape[0]
 
     return acc
 

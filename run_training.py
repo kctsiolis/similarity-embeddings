@@ -103,11 +103,15 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     if args.mode == 'teacher' or args.mode == 'random':
         assert args.loss == 'cross-entropy'
         model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
+    elif args.mode == 'linear_classifier':
+        assert args.loss == 'cross-entropy'
+        model = get_model(
+            args.model, load=True, load_path=args.load_path,
+            one_channel=one_channel, num_classes=num_classes)
     else:
         model = get_model(args.model, one_channel=one_channel, get_embedder=True)
     
     if args.mode == 'linear_classifier' or args.mode == 'random':
-        assert args.loss == 'cross-entropy'
         model = Classifier(model, num_classes=num_classes)
 
     model.to(device)
