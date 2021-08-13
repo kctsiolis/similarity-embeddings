@@ -55,6 +55,7 @@ def main():
 
     for data, _ in tqdm(train_loader):
         data = data.to(device)
+        batch_size = data.shape[0]
         crop = make_augmentation('crop', simclr=True)
         blur = make_augmentation('blur', simclr=True)
         jitter = make_augmentation('jitter', simclr=True)
@@ -63,13 +64,13 @@ def main():
             augmented_data = flip(augmented_data)
             augmented_data, alpha_2 = jitter.augment(augmented_data)
             augmented_data = grayscale(augmented_data)
-            augmented_data, alpha_3, _ = blur.augment(augmented_data)
+            augmented_data, alpha_3 = blur.augment(augmented_data)
             sims = get_model_similarity(model, data, augmented_data, cosine=args.cosine)
 
-            alpha_1 = torch.reshape(alpha_1, (args.batch_size, 1))
-            alpha_2 = torch.reshape(alpha_2, (args.batch_size, 1))
-            alpha_3 = torch.reshape(alpha_3, (args.batch_size, 1))
-            sims = torch.reshape(sims, (args.batch_size, 1))
+            alpha_1 = torch.reshape(alpha_1, (batch_size, 1)).to(device)
+            alpha_2 = torch.reshape(alpha_2, (batch_size, 1)).to(device)
+            alpha_3 = torch.reshape(alpha_3, (batch_size, 1)).to(device)
+            sims = torch.reshape(sims, (batch_size, 1))
             entries = torch.cat((alpha_1, alpha_2, alpha_3, sims), dim=1).cpu().detach().numpy()
             table = np.concatenate((table, entries), axis=0)
 

@@ -79,30 +79,29 @@ class GaussianBlur(Augmentation):
             self.kernel_size = kernel_size
 
     def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        augmented_data = data.clone()
         if self.kernel_size is None:
             img_size = min(data.shape[2], data.shape[3])
             self.kernel_size = img_size if img_size % 2 == 1 else img_size - 1 
 
         sigma = alpha * 5
-        if self.simclr: 
-            for i, image in enumerate(data):
-                data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size)(image)
-        else:
-            for i, image in enumerate(data):
-                data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size, sigma[i].item())(image)
+        for i, image in enumerate(data):
+            augmented_data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size, sigma[i].item())(image)
 
-        return data, alpha
+        return augmented_data, alpha
 
     def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        augmented_data = data.clone()
+
         if self.kernel_size is None:
             img_size = min(data.shape[2], data.shape[3])
             k = img_size // 10
             self.kernel_size = k if k % 2 == 1 else k - 1
 
         for i, image in enumerate(data):
-            data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size, alpha[i].item())(image)
+            augmented_data[i,:,:,:] = transforms.GaussianBlur(self.kernel_size, alpha[i].item())(image)
 
-        return data, alpha
+        return augmented_data, alpha
 
 class ColorJitter(Augmentation):
     def __init__(
@@ -112,6 +111,7 @@ class ColorJitter(Augmentation):
         super().__init__(alpha_min, alpha_max, device, random, simclr)
 
     def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        augmented_data = data.clone()
         # m = RelaxedOneHotCategorical(torch.Tensor([1.0]), torch.Tensor([
         #     0.25, 0.25, 0.25, 0.25]))
         # m_sample = m.sample(sample_shape=torch.Size([num_samples]))
@@ -124,15 +124,17 @@ class ColorJitter(Augmentation):
             c = 1 + pm_sample[i][1]*alpha[i].item()
             s = 1 + pm_sample[i][2]*alpha[i].item()
             h = alpha[i].item() / 2
-            data[i,:,:,:] = transforms.ColorJitter((b,b), (c,c), (s,s), (h,h))(image)
+            augmented_data[i,:,:,:] = transforms.ColorJitter((b,b), (c,c), (s,s), (h,h))(image)
 
-        return data, alpha
+        return augmented_data, alpha
 
     def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        augmented_data = data.clone()
+        alpha = torch.ones((data.shape[0]))
         for i, image in enumerate(data):
-                data[i,:,:,:] = transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)(image)
+            augmented_data[i,:,:,:] = transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)(image)
 
-        return data, None
+        return augmented_data, alpha
 
 
 class RandomCrop(Augmentation):
@@ -146,11 +148,12 @@ class RandomCrop(Augmentation):
             self.alpha_max = 1.0
 
     def apply_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        augmented_data = data.clone()
         for i, image in enumerate(data):
             sz = 1 - alpha[i].item()
-            data[i,:,:,:] = transforms.RandomResizedCrop(size=image.shape[-2:], scale=(sz,sz))(image)
+            augmented_data[i,:,:,:] = transforms.RandomResizedCrop(size=image.shape[-2:], scale=(sz,sz))(image)
 
-        return data, alpha
+        return augmented_data, alpha
 
     def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
         return self.apply_transform(data, alpha)

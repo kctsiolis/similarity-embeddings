@@ -274,6 +274,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         checkpointing = True
         checkpoint = torch.load(load_path)
         model = ResNet50(num_classes=1000)
+        dim = 2048
     elif model_str == 'resnet18_cifar':
         model = cifar_models.ResNet18()
         dim = 512
