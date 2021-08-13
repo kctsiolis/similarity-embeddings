@@ -66,8 +66,11 @@ def get_args(parser):
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--loss', type=str, choices=['cross-entropy', 'mse', 'kl'],
-                        help='Type of loss function to use.')
+    parser.add_argument('--distillation-type', type=str, choices=['similarity-based', 'class-probs'],
+                        default='similarity-based',
+                        help='Use cosine similarity in the distillation loss.')
+    parser.add_argument('-c', type=float, default=0.5,
+                        help='Weighing of soft target and hard target loss in vanilla distillation.')
     parser.add_argument('--augmentation', type=str, choices=['blur', 'jitter', 'crop'], default=None,
                         help='Augmentation to use.')
     parser.add_argument('--alpha-max', type=float, default=1.0,
@@ -101,13 +104,13 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     num_classes = 1000 if args.dataset == 'imagenet' else 10
     
     if args.mode == 'teacher' or args.mode == 'random':
-        assert args.loss == 'cross-entropy'
         model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
     elif args.mode == 'linear_classifier':
-        assert args.loss == 'cross-entropy'
         model = get_model(
             args.model, load=True, load_path=args.load_path,
             one_channel=one_channel, num_classes=num_classes)
+    elif args.mode == 'distillation' and args.distillation_type == 'class-probs':
+        model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
     else:
         model = get_model(args.model, one_channel=one_channel, get_embedder=True)
     
@@ -117,11 +120,11 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     model.to(device)
 
     if args.mode == 'distillation':
-        assert args.loss == 'mse'
+        get_embedder = args.distillation_type == 'similarity-based'
         teacher = get_model(
             args.teacher_model, load=True, load_path=args.load_path, 
             one_channel=one_channel, num_classes=num_classes, 
-            get_embedder=True) 
+            get_embedder=get_embedder) 
         teacher.to(device)
     else:
         teacher = None
@@ -133,10 +136,11 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     trainer = get_trainer(
         args.mode, model, train_loader, val_loader, device, logger, 
-        args.loss, args.epochs, args.lr, args.optimizer, args.scheduler,
+        args.epochs, args.lr, args.optimizer, args.scheduler,
         args.patience, args.early_stop, args.log_interval, idx,
-        num_gpus, teacher, args.cosine, args.augmentation,
-        args.alpha_max, args.kernel_size, args.beta, args.temp)
+        num_gpus, teacher, args.cosine, args.distillation_type, args.c,
+        args.augmentation, args.alpha_max, args.kernel_size, args.beta, 
+        args.temp)
 
     trainer.train()
 

@@ -129,10 +129,11 @@ class ColorJitter(Augmentation):
         return data, alpha
 
     def apply_simclr_transform(self, data: torch.Tensor, alpha: torch.Tensor):
+        alpha = torch.ones((data.shape[0]))
         for i, image in enumerate(data):
-                data[i,:,:,:] = transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)(image)
+            data[i,:,:,:] = transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)(image)
 
-        return data, None
+        return data, alpha
 
 
 class RandomCrop(Augmentation):
