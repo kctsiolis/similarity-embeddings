@@ -67,17 +67,10 @@ def main():
             augmented_data, alpha_3 = blur.augment(augmented_data)
             sims = get_model_similarity(model, data, augmented_data, cosine=args.cosine)
 
-<<<<<<< HEAD
             alpha_1 = torch.reshape(alpha_1, (batch_size, 1)).to(device)
             alpha_2 = torch.reshape(alpha_2, (batch_size, 1)).to(device)
             alpha_3 = torch.reshape(alpha_3, (batch_size, 1)).to(device)
             sims = torch.reshape(sims, (batch_size, 1))
-=======
-            alpha_1 = torch.reshape(alpha_1, (args.batch_size, 1)).to(device)
-            alpha_2 = torch.reshape(alpha_2, (args.batch_size, 1)).to(device)
-            alpha_3 = torch.reshape(alpha_3, (args.batch_size, 1)).to(device)
-            sims = torch.reshape(sims, (args.batch_size, 1))
->>>>>>> 0cbe793cc27fb2bcdebc78d32287f6f5179019bb
             entries = torch.cat((alpha_1, alpha_2, alpha_3, sims), dim=1).cpu().detach().numpy()
             table = np.concatenate((table, entries), axis=0)
 
