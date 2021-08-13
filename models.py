@@ -282,6 +282,10 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = Embedder(
             cifar_models.ResNet18(), dim=512,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
+    elif model_str == 'resnet18_cifar_classifier':
+        model = Classifier(Embedder(
+            cifar_models.ResNet18(), dim=512,
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats))
     elif model_str == 'resnet50_cifar':
         model = cifar_models.ResNet50()
         dim = 2048

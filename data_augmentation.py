@@ -136,7 +136,6 @@ class ColorJitter(Augmentation):
 
         return augmented_data, alpha
 
-
 class RandomCrop(Augmentation):
     def __init__(
             self, alpha_min: float = 0, alpha_max: float = 1, 

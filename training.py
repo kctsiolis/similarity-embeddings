@@ -27,7 +27,7 @@ class Trainer():
     def __init__(
             self, model: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, 
-            logger: Logger, loss_function: str, epochs: int = 250, 
+            logger: Logger, epochs: int = 250, 
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
@@ -36,15 +36,6 @@ class Trainer():
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.device = device
-        if loss_function == 'cross-entropy':
-            self.loss_function = nn.CrossEntropyLoss()
-        elif loss_function == 'mse':
-            self.loss_function = nn.MSELoss()
-        elif loss_function == 'kl':
-            self.loss_function = nn.KLDivLoss()
-        else:
-            raise ValueError(
-                'Only cross entropy, MSE, and KL divergence loss are supported.')
         self.epochs = epochs
         self.lr = lr
 
@@ -162,15 +153,16 @@ class SupervisedTrainer(Trainer):
     def __init__(
             self, model: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, 
-            logger: Logger, loss_function: str, epochs: int = 250,
+            logger: Logger, epochs: int = 250,
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
             rank: int = 0, num_devices: int = 1):
         super().__init__(
-            model, train_loader, val_loader, device, logger, loss_function,
+            model, train_loader, val_loader, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
+        self.loss_function = nn.CrossEntropyLoss()
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -203,29 +195,38 @@ class DistillationTrainer(Trainer):
             self, model: nn.Module, teacher: nn.Module,
             train_loader: DataLoader, val_loader: DataLoader, 
             device: torch.device, logger: Logger, 
-            loss_function: str, epochs: int = 250,
-            lr: float = 0.1, optim_str: str = 'adam', 
-            sched_str: str = 'plateau', patience: int = 5, 
-            early_stop: int = 10, log_interval: int = 10,
-            rank: int = 0, num_devices: int = 1,
-            cosine: bool = True):
+            epochs: int = 250, lr: float = 0.1, 
+            optim_str: str = 'adam', sched_str: str = 'plateau', 
+            patience: int = 5, early_stop: int = 10, 
+            log_interval: int = 10, rank: int = 0, 
+            num_devices: int = 1, cosine: bool = True, 
+            distillation_type: str = 'similarity-based',
+            c: float = 0.5):
         super().__init__(
-            model, train_loader, val_loader, device, logger, loss_function,
+            model, train_loader, val_loader, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
         self.teacher = teacher
         self.cosine = cosine
+        self.distillation_type = distillation_type
+        if self.distillation_type == 'similarity-based':
+            self.loss_function = nn.MSELoss()
+        else:
+            self.loss_function = nn.KLDivLoss(reduction='batchmean')
+            self.sup_loss_function = nn.CrossEntropyLoss()
+            if c < 0 or c > 1:
+                raise ValueError('c must be in [0,1].')
+            self.c = c
 
     def train_epoch(self, epoch):
         self.model.train()
         self.teacher.eval()
         train_loss = AverageMeter()
-        for batch_idx, (data, _) in enumerate(self.train_loader):
+        for batch_idx, (data, target) in enumerate(self.train_loader):
             data = data.to(self.device)
+            target = target.to(self.device)
             self.optimizer.zero_grad()
-            student_sims, teacher_sims = get_student_teacher_similarity(
-                self.model, self.teacher, data, self.cosine)
-            loss = self.loss_function(student_sims, teacher_sims)
+            loss = self.compute_loss(data, target)
             train_loss.update(loss.item())
             loss.backward()
             self.optimizer.step()
@@ -238,23 +239,46 @@ class DistillationTrainer(Trainer):
         return train_loss.get_avg(), None
 
     def validate(self):
-        return compute_distillation_loss(
-            self.model, self.teacher, self.device, self.val_loader, 
-            self.loss_function, self.cosine), None
+        self.model.eval()
+        self.teacher.eval()
+        loss = 0
+        with torch.no_grad():
+            for data, target in self.val_loader:
+                data = data.to(self.device)
+                target = target.to(self.device)
+                loss += self.compute_loss(data, target).item()
+
+        loss = loss / len(self.val_loader)
+
+        return loss, None
+
+    def compute_loss(self, data, target):
+        if self.distillation_type == 'similarity-based':
+            student_sims, teacher_sims = get_student_teacher_similarity(
+                self.model, self.teacher, data, self.cosine)
+            loss = self.loss_function(student_sims, teacher_sims)
+        else:
+            output = self.model(data)
+            model_probs = nn.LogSoftmax(dim=1)(output)
+            teacher_probs = nn.Softmax(dim=1)(self.teacher(data))
+            loss = self.c * self.loss_function(model_probs, teacher_probs) + \
+                (1-self.c) * self.sup_loss_function(output, target)
+
+        return loss
 
 class SimilarityTrainer(Trainer):
     def __init__(
             self, model: nn.Module, aug: str, alpha_max: float,
             kernel_size: int, beta: float, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, 
-            logger: Logger, loss_function: str, epochs: int = 250,
+            logger: Logger, epochs: int = 250,
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
             rank: int = 0, num_devices: int = 1,
             temp: float = 0.01):
         super().__init__(
-            model, train_loader, val_loader, device, logger, loss_function,
+            model, train_loader, val_loader, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
         self.augmentation = make_augmentation(
@@ -306,29 +330,30 @@ class SimilarityTrainer(Trainer):
 
 def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader, 
         val_loader: DataLoader, device: torch.device, 
-        logger: Logger, loss_function: str, epochs: int = 250, 
+        logger: Logger, epochs: int = 250, 
         lr: float = 0.1, optim_str: str = 'adam', 
         sched_str: str = 'plateau', patience: int = 5, 
         early_stop: int = 10, log_interval: int = 10,
         rank: int = 0, num_devices: int = 1, 
         teacher_model: nn.Module = None, cosine: bool = True,
+        distillation_type: str = 'similarity-based', c: float = 0.5,
         aug: str = None, alpha_max: float = None, 
         kernel_size: int = None, beta: float = None, temp: float = None):
     if mode == 'teacher' or mode == 'linear_classifier' or mode == 'random':
         return SupervisedTrainer(
-            model, train_loader, val_loader, device, logger, loss_function,
+            model, train_loader, val_loader, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
     elif mode == 'distillation':
         return DistillationTrainer(
             model, teacher_model, train_loader, val_loader, device,
-            logger, loss_function, epochs, lr, optim_str, sched_str,
+            logger, epochs, lr, optim_str, sched_str,
             patience, early_stop, log_interval, rank, num_devices,
-            cosine)
+            cosine, distillation_type, c)
     else:
         return SimilarityTrainer(
             model, aug, alpha_max, kernel_size, beta, train_loader, val_loader,
-            device, logger, loss_function, epochs, lr, optim_str, sched_str,
+            device, logger, epochs, lr, optim_str, sched_str,
             patience, early_stop, log_interval, rank, num_devices, temp)
 
 def predict(model: nn.Module, device: torch.device, 
@@ -479,36 +504,6 @@ def get_model_probability(sims: torch.Tensor, temp: float = 1.0
 
     """
     return 1 / (1 + torch.exp(-temp * sims))
-
-def compute_distillation_loss(student: nn.Module, teacher: nn.Module,
-    device: torch.device, loader: torch.utils.data.DataLoader, 
-    loss_function: nn.Module, cosine: bool) -> float:
-    """Compute the distillation loss.
-
-    Args:
-        student: The student model.
-        teacher: The teacher model.
-        device: The device that the models and data are stored on.
-        loader: The data the loss is computed on.
-        loss_function: The loss function.
-        cosine: Whether or not cosine similarity is being used.
-
-    Returns:
-        The distillation loss.
-
-    """
-    student.eval()
-    teacher.eval()
-    loss = 0
-    with torch.no_grad():
-        for data, _ in loader:
-            data = data.to(device)
-            student_sims, teacher_sims = get_student_teacher_similarity(student, teacher, data, cosine)
-            loss += loss_function(student_sims, teacher_sims).item()
-
-    loss = loss / len(loader)
-
-    return loss
 
 def compute_similarity_loss(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
