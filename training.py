@@ -26,8 +26,8 @@ class Trainer():
 
     def __init__(
             self, model: nn.Module, train_loader: DataLoader, 
-            val_loader: DataLoader, device: torch.device, 
-            logger: Logger, epochs: int = 250, 
+            val_loader: DataLoader, validate: bool, 
+            device: torch.device, logger: Logger, epochs: int = 250, 
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
@@ -35,6 +35,7 @@ class Trainer():
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
+        self.eval_set = 'Validation' if validate else 'Test'
         self.device = device
         self.epochs = epochs
         self.lr = lr
@@ -78,9 +79,9 @@ class Trainer():
             train_loss)
             if train_acc is not None:
                 log_str += 'Training set: Average accuracy: {:.2f}%\n'.format(train_acc)
-            log_str += '\nValidation set: Average loss: {:.6f}\n'.format(val_loss)
+            log_str += '\n{} set: Average loss: {:.6f}\n'.format(self.eval_set, val_loss)
             if val_acc is not None:
-                log_str += 'Validation set: Accuracy: {:.2f}%\n'.format(val_acc)
+                log_str += '{} set: Accuracy: {:.2f}%\n'.format(self.eval_set, val_acc)
             
             self.logger.log(log_str)
 
@@ -134,11 +135,11 @@ class Trainer():
         if self.train_accs[best_epoch] is not None:
             self.logger.log_results("Training Accuracy: {:.2f}".format(
                 self.train_accs[best_epoch]))
-        self.logger.log_results("Validation Loss: {:.6f}".format(
-            self.val_losses[best_epoch]))
+        self.logger.log_results("{} Loss: {:.6f}".format(
+            self.eval_set, self.val_losses[best_epoch]))
         if self.val_accs[best_epoch] is not None:
-            self.logger.log_results("Validation Accuracy: {:.2f}".format(
-                self.val_accs[best_epoch]))
+            self.logger.log_results("{} Accuracy: {:.2f}".format(
+                self.eval_set, self.val_accs[best_epoch]))
 
         #Save loss and accuracy plots
         save_dir = self.logger.get_plots_dir()
@@ -152,14 +153,14 @@ class Trainer():
 class SupervisedTrainer(Trainer):
     def __init__(
             self, model: nn.Module, train_loader: DataLoader, 
-            val_loader: DataLoader, device: torch.device, 
-            logger: Logger, epochs: int = 250,
+            val_loader: DataLoader, validate: bool, 
+            device: torch.device, logger: Logger, epochs: int = 250,
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
             rank: int = 0, num_devices: int = 1):
         super().__init__(
-            model, train_loader, val_loader, device, logger,
+            model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
         self.loss_function = nn.CrossEntropyLoss()
@@ -194,7 +195,7 @@ class DistillationTrainer(Trainer):
     def __init__(
             self, model: nn.Module, teacher: nn.Module,
             train_loader: DataLoader, val_loader: DataLoader, 
-            device: torch.device, logger: Logger, 
+            validate: bool, device: torch.device, logger: Logger, 
             epochs: int = 250, lr: float = 0.1, 
             optim_str: str = 'adam', sched_str: str = 'plateau', 
             patience: int = 5, early_stop: int = 10, 
@@ -203,7 +204,7 @@ class DistillationTrainer(Trainer):
             distillation_type: str = 'similarity-based',
             c: float = 0.5):
         super().__init__(
-            model, train_loader, val_loader, device, logger,
+            model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
         self.teacher = teacher
@@ -270,7 +271,7 @@ class SimilarityTrainer(Trainer):
     def __init__(
             self, model: nn.Module, aug: str, alpha_max: float,
             kernel_size: int, beta: float, train_loader: DataLoader, 
-            val_loader: DataLoader, device: torch.device, 
+            val_loader: DataLoader, validate: bool, device: torch.device, 
             logger: Logger, epochs: int = 250,
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
@@ -278,7 +279,7 @@ class SimilarityTrainer(Trainer):
             rank: int = 0, num_devices: int = 1,
             temp: float = 0.01):
         super().__init__(
-            model, train_loader, val_loader, device, logger,
+            model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
         self.augmentation = make_augmentation(
@@ -329,7 +330,7 @@ class SimilarityTrainer(Trainer):
             self.aug, self.alpha_max, self.beta, self.cosine, self.temp), None
 
 def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader, 
-        val_loader: DataLoader, device: torch.device, 
+        val_loader: DataLoader, validate: bool, device: torch.device, 
         logger: Logger, epochs: int = 250, 
         lr: float = 0.1, optim_str: str = 'adam', 
         sched_str: str = 'plateau', patience: int = 5, 
@@ -341,19 +342,19 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
         kernel_size: int = None, beta: float = None, temp: float = None):
     if mode == 'teacher' or mode == 'linear_classifier' or mode == 'random':
         return SupervisedTrainer(
-            model, train_loader, val_loader, device, logger,
+            model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
             log_interval, rank, num_devices)
     elif mode == 'distillation':
         return DistillationTrainer(
-            model, teacher_model, train_loader, val_loader, device,
+            model, teacher_model, train_loader, val_loader, validate, device,
             logger, epochs, lr, optim_str, sched_str,
             patience, early_stop, log_interval, rank, num_devices,
             cosine, distillation_type, c)
     else:
         return SimilarityTrainer(
             model, aug, alpha_max, kernel_size, beta, train_loader, val_loader,
-            device, logger, epochs, lr, optim_str, sched_str,
+            validate, device, logger, epochs, lr, optim_str, sched_str,
             patience, early_stop, log_interval, rank, num_devices, temp)
 
 def predict(model: nn.Module, device: torch.device, 

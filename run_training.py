@@ -51,6 +51,8 @@ def get_args(parser):
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
+    parser.add_argument('--validate', action='store_true',
+                        help='Evaluate on a held out validation set (as opposed to the test set).')
     parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
@@ -97,7 +99,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     #Get the data
     train_loader, val_loader = dataset_loader(args.dataset,
-        batch_size, device, train=True, distributed=distributed)
+        batch_size, device, validate=args.validate, distributed=distributed)
 
     logger = Logger(args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'
@@ -135,8 +137,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
             teacher = DistributedDataParallel(teacher, device_ids=[device])
 
     trainer = get_trainer(
-        args.mode, model, train_loader, val_loader, device, logger, 
-        args.epochs, args.lr, args.optimizer, args.scheduler,
+        args.mode, model, train_loader, val_loader, args.validate,
+        device, logger, args.epochs, args.lr, args.optimizer, args.scheduler,
         args.patience, args.early_stop, args.log_interval, idx,
         num_gpus, teacher, args.cosine, args.distillation_type, args.c,
         args.augmentation, args.alpha_max, args.kernel_size, args.beta, 

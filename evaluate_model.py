@@ -58,10 +58,10 @@ def main():
     device = torch.device(args.device)
 
     #Get the data
-    train = args.split != 'test'
+    validate = args.split != 'test'
 
     loader1, loader2 = dataset_loader(args.dataset,
-        args.batch_size, device, train=train)
+        args.batch_size, device, validate=validate)
             
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
@@ -75,7 +75,7 @@ def main():
     elif args.split == 'val':
         loss, acc = predict(model, device, loader2, nn.CrossEntropyLoss())
     else:
-        loss, acc = predict(model, device, loader1, nn.CrossEntropyLoss())
+        loss, acc = predict(model, device, loader2, nn.CrossEntropyLoss())
 
     print('Loss: {:.6f}'.format(loss))
     print('Accuracy: {:.2f}'.format(acc))
