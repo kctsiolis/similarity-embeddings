@@ -51,6 +51,8 @@ def get_args(parser):
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
+    parser.add_argument('--train-set-fraction', type=float, default=1.0,
+                        help='Fraction of training set to train on.')
     parser.add_argument('--validate', action='store_true',
                         help='Evaluate on a held out validation set (as opposed to the test set).')
     parser.add_argument('--early-stop', type=int, default=10, metavar='E',
@@ -98,8 +100,9 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     batch_size = int(args.batch_size / num_gpus)
 
     #Get the data
-    train_loader, val_loader = dataset_loader(args.dataset,
-        batch_size, device, validate=args.validate, distributed=distributed)
+    train_loader, val_loader = dataset_loader(
+        args.dataset, batch_size, args.train_set_fraction, 
+        args.validate, distributed)
 
     logger = Logger(args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'

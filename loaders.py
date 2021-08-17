@@ -14,7 +14,7 @@ parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 data_path = parsed_config['imagenet_path']
 
 def dataset_loader(dataset: str, batch_size: int, 
-    device: torch.device, validate: bool = True,
+    train_set_fraction: float, validate: bool = True,
     distributed: bool = False
     ) -> tuple([DataLoader, DataLoader]):
     """Load a specified dataset.
@@ -22,7 +22,7 @@ def dataset_loader(dataset: str, batch_size: int,
     Args:
         dataset: String specifying which dataset to load.
         batch_size: Batch size.
-        device: Device that batches will be loaded to.
+        train_set_fraction: Fraction of training set to use.
         validate: Whether or not to hold out part of the training set for validation.
         distributed: Whether or not loading will be parallelized.
 
@@ -31,18 +31,22 @@ def dataset_loader(dataset: str, batch_size: int,
 
     """
     if dataset == 'mnist':
-        return mnist_loader(batch_size=batch_size,
-            device=device, validate=validate, distributed=distributed)
+        return mnist_loader(
+            batch_size=batch_size, train_set_fraction=train_set_fraction, 
+            validate=validate, distributed=distributed)
     elif dataset == 'cifar':
-        return cifar_loader(batch_size=batch_size,
-            device=device, validate=validate, distributed=distributed)
+        return cifar_loader(
+            batch_size=batch_size, train_set_fraction=train_set_fraction,
+            validate=validate, distributed=distributed)
     else:
         if not validate:
             raise ValueError('Test set not available for ImageNet.')
         return imagenet_loader(
-            batch_size=batch_size, distributed=distributed)
+            batch_size=batch_size, train_set_fraction=train_set_fraction,
+            distributed=distributed)
 
-def imagenet_loader(batch_size: int, workers: int = 10, 
+def imagenet_loader(
+    batch_size: int, train_set_fraction: float = 1.0, workers: int = 10, 
     distributed: bool = False
     ) -> tuple([DataLoader, DataLoader]):
     """Loader for the ImageNet dataset.
@@ -71,13 +75,18 @@ def imagenet_loader(batch_size: int, workers: int = 10,
             normalize,
         ]))
 
+    train_set_size = int(1281167 * train_set_fraction)
+
     if distributed:
         train_sampler = DistributedSampler(train_dataset)
     else:
         train_sampler = None
 
+    train_subset, _ = torch.utils.data.random_split(
+            train_dataset, [train_set_size, 1281167-train_set_size])
+
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=(train_sampler is None),
+        train_subset, batch_size=batch_size, shuffle=(train_sampler is None),
         num_workers=workers, pin_memory=True, sampler=train_sampler)
 
     val_loader = DataLoader(
@@ -123,8 +132,9 @@ class TransformedDataset(Dataset):
         return len(self.dataset)
 
 
-def cifar_loader(batch_size: int, device: torch.device, 
-    validate: bool = True, distributed: bool = False,
+def cifar_loader(batch_size: int, 
+    train_set_fraction: float = 1.0, validate: bool = True, 
+    distributed: bool = False,
     ) -> tuple([DataLoader, DataLoader]):
     """Load the CIFAR-10 training set and split into training and validation.
 
@@ -133,6 +143,7 @@ def cifar_loader(batch_size: int, device: torch.device,
     Args:
         batch_size: Batch size.
         device: Device being used.
+        train_set_fraction: Fraction of training set to use.
         validate: Whether or not to hold out part of the training set for validation.
         distributed: Whether or not we are conducting parallel computation.
 
@@ -143,6 +154,7 @@ def cifar_loader(batch_size: int, device: torch.device,
 
     train_set = datasets.CIFAR10(root='./data', train=True,
         download=True)
+    train_set_size = int(train_set_fraction * 50000)
 
     train_transforms = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
@@ -158,14 +170,18 @@ def cifar_loader(batch_size: int, device: torch.device,
 
     if validate:
         #Split original training set into new training and validation sets
-        train_subset, valid_subset = torch.utils.data.random_split(train_set,
-            [40000, 10000])
+        if train_set_size == 50000:
+            raise ValueError('Cannot use the full training set if performing validation.')
+        train_subset, val_subset = torch.utils.data.random_split(
+            train_set, [train_set_size, 50000-train_set_size])
         train_transformed = TransformedDataset(train_subset, train_transforms)
-        valid_transformed = TransformedDataset(valid_subset, test_transforms)
+        val_transformed = TransformedDataset(val_subset, test_transforms)
         test_loader = DataLoader(
-            valid_transformed, batch_size=batch_size, shuffle=False)
+            val_transformed, batch_size=batch_size, shuffle=False)
     else:
-        train_transformed = TransformedDataset(train_set, train_transforms)
+        train_subset, _ = torch.utils.data.random_split(
+            train_set, [train_set_size, 50000-train_set_size])
+        train_transformed = TransformedDataset(train_subset, train_transforms)
         test_set = datasets.CIFAR10(root='./data', train=False,
         download=True, transform=test_transforms)
         test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
@@ -181,7 +197,7 @@ def cifar_loader(batch_size: int, device: torch.device,
 
     return train_loader, test_loader
 
-def mnist_loader(batch_size: int, device: torch.device,
+def mnist_loader(batch_size: int, train_set_fraction: float,
     validate: bool = True, distributed: bool = False
     ) -> tuple([DataLoader, DataLoader]):
     """Load the MNIST training set and split into training and validation.
@@ -191,7 +207,8 @@ def mnist_loader(batch_size: int, device: torch.device,
 
     Args:
         batch_size: Batch size.
-        device: Device being used.
+        train_set_fraction: Fraction of training set to be used.
+        validate: Whether or not to hold out a validation set.
         distributed: Whether or not we are conducting parallel computation.
 
     Returns:
@@ -206,13 +223,18 @@ def mnist_loader(batch_size: int, device: torch.device,
     #Extract MNIST training set
     train_set = datasets.MNIST('../data', train=True, download=True,
         transform=transform)
+    train_set_size = int(train_set_fraction * 60000)
 
     if validate:
         #Split original training set into new training and validation sets
+        if train_set_size == 60000:
+            raise ValueError('Cannot use the full training set if performing validation.')
         train_subset, valid_subset = torch.utils.data.random_split(train_set,
-            [50000, 10000])
+            [train_set_size, 60000 - train_set_fraction])
         test_loader = DataLoader(valid_subset, batch_size=batch_size, shuffle=False)
     else:
+        train_subset, _ = torch.utils.data.random_split(
+            train_set, [train_set_size, 60000-train_set_size])
         test_set = datasets.MNIST('../data', train=False, download=True,
         transform=transform)
         test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
