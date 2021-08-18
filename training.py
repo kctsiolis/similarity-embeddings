@@ -68,20 +68,24 @@ class Trainer():
         self.val_losses = []
         self.train_accs = []
         self.val_accs = []
+        self.train_accs5 = []
+        self.val_accs5 = []
 
     def train(self):
         epochs_until_stop = self.early_stop
         for epoch in range(1, self.epochs + 1):
-            train_loss, train_acc = self.train_epoch(epoch)
-            val_loss, val_acc = self.validate()
+            train_loss, train_acc, train_acc5 = self.train_epoch(epoch)
+            val_loss, val_acc, val_acc5 = self.validate()
 
             log_str = '\nTraining set: Average loss: {:.6f}\n'.format(
             train_loss)
             if train_acc is not None:
-                log_str += 'Training set: Average accuracy: {:.2f}%\n'.format(train_acc)
+                log_str += 'Training set: Average top-1 accuracy: {:.2f}%\n'.format(train_acc)
+                log_str += 'Training set: Average top-5 accuracy: {:.2f}%\n'.format(train_acc5)
             log_str += '\n{} set: Average loss: {:.6f}\n'.format(self.eval_set, val_loss)
             if val_acc is not None:
-                log_str += '{} set: Accuracy: {:.2f}%\n'.format(self.eval_set, val_acc)
+                log_str += '{} set: Top-1 Accuracy: {:.2f}%\n'.format(self.eval_set, val_acc)
+                log_str += '{} set: Top-5 Accuracy: {:.2f}%\n'.format(self.eval_set, val_acc5)
             
             self.logger.log(log_str)
 
@@ -89,6 +93,8 @@ class Trainer():
             self.val_losses.append(val_loss)
             self.train_accs.append(train_acc)
             self.val_accs.append(val_acc)
+            self.train_accs5.append(train_acc5)
+            self.val_accs5.append(val_acc5)
 
             #Check if validation loss is worsening
             if val_loss > min(self.val_losses):
@@ -133,13 +139,17 @@ class Trainer():
         self.logger.log_results("Training Loss: {:.6f}".format(
             self.train_losses[best_epoch]))
         if self.train_accs[best_epoch] is not None:
-            self.logger.log_results("Training Accuracy: {:.2f}".format(
+            self.logger.log_results("Training Top-1 Accuracy: {:.2f}".format(
                 self.train_accs[best_epoch]))
+            self.logger.log_results("Training Top-5 Accuracy: {:.2f}".format(
+                self.train_accs5[best_epoch]))
         self.logger.log_results("{} Loss: {:.6f}".format(
             self.eval_set, self.val_losses[best_epoch]))
         if self.val_accs[best_epoch] is not None:
-            self.logger.log_results("{} Accuracy: {:.2f}".format(
+            self.logger.log_results("{} Top-1 Accuracy: {:.2f}".format(
                 self.eval_set, self.val_accs[best_epoch]))
+            self.logger.log_results("{} Top-5 Accuracy: {:.2f}".format(
+                self.eval_set, self.val_accs5[best_epoch]))
 
         #Save loss and accuracy plots
         save_dir = self.logger.get_plots_dir()
@@ -168,15 +178,17 @@ class SupervisedTrainer(Trainer):
     def train_epoch(self, epoch):
         self.model.train()
         train_loss = AverageMeter()
-        train_acc = AverageMeter()
+        train_top1_acc = AverageMeter()
+        train_top5_acc = AverageMeter()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             data, target = data.to(self.device), target.to(self.device)
             self.optimizer.zero_grad()
             output = self.model(data)
             loss = self.loss_function(output, target)
-            acc = compute_accuracy(output, target)
+            top1_acc, top5_acc = compute_accuracy(output, target)
             train_loss.update(loss.item())
-            train_acc.update(acc)
+            train_top1_acc.update(top1_acc)
+            train_top5_acc.update(top5_acc)
             loss.backward()
             self.optimizer.step()
             if batch_idx % self.log_interval == 0:
@@ -185,7 +197,7 @@ class SupervisedTrainer(Trainer):
                     100. * batch_idx / len(self.train_loader), loss.item())
                 self.logger.log(log_str)
 
-        return train_loss.get_avg(), train_acc.get_avg()
+        return train_loss.get_avg(), train_top1_acc.get_avg(), train_top5_acc.get_avg()
 
     def validate(self):
         return predict(
@@ -237,7 +249,7 @@ class DistillationTrainer(Trainer):
                     100. * batch_idx / len(self.train_loader), loss.item())
                 self.logger.log(log_str)
         
-        return train_loss.get_avg(), None
+        return train_loss.get_avg(), None, None
 
     def validate(self):
         self.model.eval()
@@ -251,7 +263,7 @@ class DistillationTrainer(Trainer):
 
         loss = loss / len(self.val_loader)
 
-        return loss, None
+        return loss, None, None
 
     def compute_loss(self, data, target):
         if self.distillation_type == 'similarity-based':
@@ -322,12 +334,12 @@ class SimilarityTrainer(Trainer):
                     100. * batch_idx / len(self.train_loader), loss.item())
                 self.logger.log(log_str)
 
-        return train_loss.get_avg(), None
+        return train_loss.get_avg(), None, None
 
     def validate(self):
         return compute_similarity_loss(
             self.model, self.device, self.val_loader, self.loss_function,
-            self.aug, self.alpha_max, self.beta, self.cosine, self.temp), None
+            self.aug, self.alpha_max, self.beta, self.cosine, self.temp), None, None
 
 def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader, 
         val_loader: DataLoader, validate: bool, device: torch.device, 
@@ -373,25 +385,32 @@ def predict(model: nn.Module, device: torch.device,
     """
     model.eval()
     loss = 0
-    acc = 0
+    acc1 = 0
+    acc5 = 0
     with torch.no_grad():
         for data, target in loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             loss += loss_function(output, target).item()
-            acc += compute_accuracy(output, target)
+            cur_acc1, cur_acc5 = compute_accuracy(output, target)
+            acc1 += cur_acc1
+            acc5 += cur_acc5
     
-    loss, acc = loss / len(loader), acc / len(loader)
+    loss, acc1, acc5 = loss / len(loader), acc1 / len(loader), acc5 / len(loader)
 
-    return loss, acc
+    return loss, acc1, acc5
 
 def compute_accuracy(output, target):
     with torch.no_grad():
-        pred = output.argmax(dim=1, keepdim=True)
-        correct = pred.eq(target.view_as(pred)).sum().item()
-        acc = 100 * correct / output.shape[0]
+        batch_size = target.shape[0]
 
-    return acc
+        _, pred = output.topk(5, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+        top1_acc = correct[:1].view(-1).float().sum(0, keepdim=True) * 100.0 / batch_size
+        top5_acc = correct[:5].reshape(-1).float().sum(0, keepdim=True) * 100.0 / batch_size
+
+    return top1_acc.item(), top5_acc.item()
 
 def get_embeddings(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, emb_dim: int
