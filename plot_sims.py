@@ -37,8 +37,7 @@ def get_args(parser):
                         help='Number of data samples to use. Default is to use entire validation set.')
     parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'], default='cifar',
                         help='Dataset model was trained on.')
-    parser.add_argument('--augmentation', type=str, choices=['blur-sigma', 'color-jitter', 
-                        'random-crop', 'none'], default='blur-sigma',
+    parser.add_argument('--augmentation', type=str, choices=['blur', 'jitter', 'crop'], default='blur',
                         help='Type of augmentation to use.') 
     parser.add_argument('--alpha', type=float, default=[1.0], nargs='+',
                         help='Augmentation intensity.')

@@ -61,7 +61,7 @@ def main():
     validate = args.split != 'test'
 
     loader1, loader2 = dataset_loader(args.dataset,
-        args.batch_size, device, validate=validate)
+        args.batch_size, 1, validate=validate)
             
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
