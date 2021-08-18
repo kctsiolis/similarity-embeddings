@@ -35,7 +35,7 @@ def get_args(parser):
     parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'similarity',
         'linear_classifier', 'random'] ,metavar='D',
         help='Training mode.')
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet', 'tiny_imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Batch size (default: 64)')
@@ -106,7 +106,12 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     logger = Logger(args, save=(idx == 0))
     one_channel = args.dataset == 'mnist'
-    num_classes = 1000 if args.dataset == 'imagenet' else 10
+    if args.dataset == 'imagenet':
+        num_classes = 1000
+    elif args.dataset == 'tiny_imagenet':
+        num_classes = 200
+    else:
+        num_classes = 10
     
     if args.mode == 'teacher' or args.mode == 'random':
         model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
