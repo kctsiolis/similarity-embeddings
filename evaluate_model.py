@@ -29,6 +29,10 @@ def get_args(parser):
         help='Choice of either training, validation, or test subset (where applicable).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Batch size (default: 64)')
+    parser.add_argument('--train-set-fraction', type=float, default=1.0,
+                        help='Fraction of training set to train on.')
+    parser.add_argument('--validate', action='store_true',
+                        help='Evaluate on a held out validation set (as opposed to the test set).')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
     parser.add_argument('--device', type=str, default='cpu',
@@ -57,28 +61,29 @@ def main():
 
     device = torch.device(args.device)
 
-    #Get the data
-    validate = args.split != 'test'
-
-    loader1, loader2 = dataset_loader(args.dataset,
-        args.batch_size, 1, validate=validate)
+    loader1, loader2 = dataset_loader(
+        args.dataset, args.batch_size, 
+        train_set_fraction=args.train_set_fraction, 
+        validate=args.validate)
             
     one_channel = args.dataset == 'mnist'
     num_classes = 1000 if args.dataset == 'imagenet' else 10
 
-    model = get_model(args.model, load=True, load_path=args.load_path, 
+    model = get_model(
+        args.model, load=True, load_path=args.load_path, 
         one_channel=one_channel, num_classes=num_classes)
     model.to(device)
 
     if args.split == 'train':
-        loss, acc = predict(model, device, loader1, nn.CrossEntropyLoss())
+        loss, acc1, acc5 = predict(model, device, loader1, nn.CrossEntropyLoss())
     elif args.split == 'val':
-        loss, acc = predict(model, device, loader2, nn.CrossEntropyLoss())
+        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss())
     else:
-        loss, acc = predict(model, device, loader2, nn.CrossEntropyLoss())
+        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss())
 
     print('Loss: {:.6f}'.format(loss))
-    print('Accuracy: {:.2f}'.format(acc))
+    print('Top-1 Accuracy: {:.2f}'.format(acc1))
+    print('Top-5 Accuracy: {:.2f}'.format(acc5))
 
 if __name__ == '__main__':
     main()

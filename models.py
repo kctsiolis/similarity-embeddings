@@ -80,7 +80,7 @@ class ResNet152(nn.Module):
         dim: Dimension of the last embedding layer
 
     """
-    def __init__(self, num_classes=10, one_channel=False):
+    def __init__(self, num_classes=10, one_channel=False, pretrained=False):
         """Instantiate object of class ResNet152.
         
         Args:
@@ -90,7 +90,10 @@ class ResNet152(nn.Module):
 
         """
         super().__init__()
-        self.model = resnet152(num_classes=num_classes)
+        if pretrained:
+            self.model = resnet152(pretrained=True)
+        else:
+            self.model = resnet152(num_classes=num_classes)
         self.dim = 2048
         if one_channel:
             #Set number of input channels to 1 (since MNIST images are greyscale)
@@ -269,6 +272,10 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         load = False
         model = ResNet50(one_channel=one_channel, pretrained=True)
         dim = 2048
+    elif model_str == 'resnet152_pretrained':
+        load = False
+        model = ResNet152(one_channel=one_channel, pretrained=True)
+        dim = 2048
     elif model_str == 'simclr_pretrained':
         assert load == True
         checkpointing = True
@@ -276,26 +283,26 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = ResNet50(num_classes=1000)
         dim = 2048
     elif model_str == 'resnet18_cifar':
-        model = cifar_models.ResNet18()
+        model = cifar_models.ResNet18(num_classes=num_classes)
         dim = 512
     elif model_str == 'resnet18_cifar_embedder':
         model = Embedder(
-            cifar_models.ResNet18(), dim=512,
+            cifar_models.ResNet18(num_classes=num_classes), dim=512,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
     elif model_str == 'resnet18_cifar_classifier':
         model = Classifier(Embedder(
-            cifar_models.ResNet18(), dim=512,
+            cifar_models.ResNet18(num_classes=num_classes), dim=512,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats))
     elif model_str == 'resnet50_cifar':
-        model = cifar_models.ResNet50()
+        model = cifar_models.ResNet50(num_classes=num_classes)
         dim = 2048
     elif model_str == 'resnet50_cifar_embedder':
         model = Embedder(
-            cifar_models.ResNet50(), dim=2048,
+            cifar_models.ResNet50(num_classes=num_classes), dim=2048,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats)
     elif model_str == 'resnet50_cifar_classifier':
         model = Classifier(Embedder(
-            cifar_models.ResNet50(), dim=2048,
+            cifar_models.ResNet50(num_classes=num_classes), dim=2048,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats))
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
