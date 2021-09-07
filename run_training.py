@@ -58,7 +58,9 @@ def get_args(parser):
     parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
+                        help='how many batches to wait before logging training status.')
+    parser.add_argument('--plot-interval', type=int,
+                        help='how many batches to wait before plotting training loss.')
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
                         help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
                             Can also specify multiple devices (separated by spaces) for multiprocessing.')
@@ -147,8 +149,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     trainer = get_trainer(
         args.mode, model, train_loader, val_loader, args.validate,
         device, logger, args.epochs, args.lr, args.optimizer, args.scheduler,
-        args.patience, args.early_stop, args.log_interval, idx,
-        num_gpus, teacher, args.cosine, args.distillation_type, args.c,
+        args.patience, args.early_stop, args.log_interval, args.plot_interval, 
+        idx, num_gpus, teacher, args.cosine, args.distillation_type, args.c,
         args.augmentation, args.alpha_max, args.kernel_size, args.beta, 
         args.temp)
 

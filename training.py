@@ -31,6 +31,7 @@ class Trainer():
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
+            plot_interval: int = None,
             rank: int = 0, num_devices: int = 1):
         self.model = model
         self.train_loader = train_loader
@@ -59,11 +60,18 @@ class Trainer():
 
         self.early_stop = early_stop
         self.log_interval = log_interval
+        if plot_interval is None:
+            self.plot_interval = len(self.train_loader) // 10
+        else:
+            self.plot_interval = plot_interval
         self.logger = logger
-        self.save_path = logger.get_model_path()
+        self.model_path = logger.get_model_path()
+        self.plots_dir = logger.get_plots_dir()
         self.rank = rank
         self.num_devices = num_devices
 
+        self.iters = [] 
+        self.logged_train_losses = []
         self.train_losses = []
         self.val_losses = []
         self.train_accs = []
@@ -106,12 +114,12 @@ class Trainer():
 
                 #Save the current model (as it is the best one so far)
                 if self.rank == 0:
-                    if self.save_path is not None:
+                    if self.model_path is not None:
                         self.logger.log("Saving model...")
                         if self.num_devices > 1:
-                            torch.save(self.model.module.state_dict(), self.save_path)
+                            torch.save(self.model.module.state_dict(), self.model_path)
                         else:
-                            torch.save(self.model.state_dict(), self.save_path)
+                            torch.save(self.model.state_dict(), self.model_path)
                         self.logger.log("Model saved.\n")
 
             if self.sched_str == 'plateau':
@@ -152,13 +160,11 @@ class Trainer():
                 self.eval_set, self.val_accs5[best_epoch]))
 
         #Save loss and accuracy plots
-        save_dir = self.logger.get_plots_dir()
-        if save_dir is not None:
-            train_plots(
-                self.train_losses, self.val_losses, "Loss", save_dir, self.change_epochs)
-            if self.train_accs is not None and self.val_accs is not None:
-                train_plots(
-                    self.train_accs, self.val_accs, "Accuracy", save_dir, self.change_epochs)
+        train_val_plots(
+            self.train_losses, self.val_losses, "Loss", self.plots_dir, self.change_epochs)
+        if self.train_accs is not None and self.val_accs is not None:
+            train_val_plots(
+                self.train_accs, self.val_accs, "Accuracy", self.plots_dir, self.change_epochs)
 
 class SupervisedTrainer(Trainer):
     def __init__(
@@ -168,11 +174,12 @@ class SupervisedTrainer(Trainer):
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
-            rank: int = 0, num_devices: int = 1):
+            plot_interval: int = None, rank: int = 0, 
+            num_devices: int = 1):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, rank, num_devices)
+            log_interval, plot_interval, rank, num_devices)
         self.loss_function = nn.CrossEntropyLoss()
 
     def train_epoch(self, epoch):
@@ -192,10 +199,16 @@ class SupervisedTrainer(Trainer):
             loss.backward()
             self.optimizer.step()
             if batch_idx % self.log_interval == 0:
+                logged_loss = train_loss.get_avg()
+                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
+                self.logged_train_losses.append(logged_loss)
                 log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
                     epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
-                    100. * batch_idx / len(self.train_loader), loss.item())
+                    100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
+            if batch_idx % self.plot_interval == 0:
+                train_loss_plot(
+                    self.iters, self.logged_train_losses, self.plots_dir)
 
         return train_loss.get_avg(), train_top1_acc.get_avg(), train_top5_acc.get_avg()
 
@@ -211,14 +224,14 @@ class DistillationTrainer(Trainer):
             epochs: int = 250, lr: float = 0.1, 
             optim_str: str = 'adam', sched_str: str = 'plateau', 
             patience: int = 5, early_stop: int = 10, 
-            log_interval: int = 10, rank: int = 0, 
-            num_devices: int = 1, cosine: bool = True, 
+            log_interval: int = 10, plot_interval: int = None,
+            rank: int = 0, num_devices: int = 1, cosine: bool = True, 
             distillation_type: str = 'similarity-based',
             c: float = 0.5):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, rank, num_devices)
+            log_interval, plot_interval, rank, num_devices)
         self.teacher = teacher
         self.cosine = cosine
         self.distillation_type = distillation_type
@@ -244,10 +257,16 @@ class DistillationTrainer(Trainer):
             loss.backward()
             self.optimizer.step()
             if batch_idx % self.log_interval == 0:
+                logged_loss = train_loss.get_avg()
+                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
+                self.logged_train_losses.append(logged_loss)
                 log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
                     epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
-                    100. * batch_idx / len(self.train_loader), loss.item())
+                    100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
+            if batch_idx % self.plot_interval == 0:
+                train_loss_plot(
+                    self.iters, self.logged_train_losses, self.plots_dir)
         
         return train_loss.get_avg(), None, None
 
@@ -288,12 +307,12 @@ class SimilarityTrainer(Trainer):
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,
-            rank: int = 0, num_devices: int = 1,
+            plot_interval: int = None, rank: int = 0, num_devices: int = 1,
             temp: float = 0.01):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, rank, num_devices)
+            log_interval, plot_interval, rank, num_devices)
         self.augmentation = make_augmentation(
             aug, alpha_max=alpha_max, kernel_size=kernel_size, device=device)
         self.beta = beta
@@ -329,10 +348,16 @@ class SimilarityTrainer(Trainer):
             loss.backward()
             self.optimizer.step()
             if batch_idx % self.log_interval == 0:
+                logged_loss = train_loss.get_avg()
+                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
+                self.logged_train_losses.append(logged_loss)
                 log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                    epoch, batch_idx * len(data), len(self.train_loader.dataset),
-                    100. * batch_idx / len(self.train_loader), loss.item())
+                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
+                    100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
+            if batch_idx % self.plot_interval == 0:
+                train_loss_plot(
+                    self.iters, self.logged_train_losses, self.plots_dir)
 
         return train_loss.get_avg(), None, None
 
@@ -347,7 +372,7 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
         lr: float = 0.1, optim_str: str = 'adam', 
         sched_str: str = 'plateau', patience: int = 5, 
         early_stop: int = 10, log_interval: int = 10,
-        rank: int = 0, num_devices: int = 1, 
+        plot_interval: int = None, rank: int = 0, num_devices: int = 1, 
         teacher_model: nn.Module = None, cosine: bool = True,
         distillation_type: str = 'similarity-based', c: float = 0.5,
         aug: str = None, alpha_max: float = None, 
@@ -356,18 +381,18 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
         return SupervisedTrainer(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, rank, num_devices)
+            log_interval, plot_interval, rank, num_devices)
     elif mode == 'distillation':
         return DistillationTrainer(
             model, teacher_model, train_loader, val_loader, validate, device,
             logger, epochs, lr, optim_str, sched_str,
-            patience, early_stop, log_interval, rank, num_devices,
+            patience, early_stop, log_interval, plot_interval, rank, num_devices,
             cosine, distillation_type, c)
     else:
         return SimilarityTrainer(
             model, aug, alpha_max, kernel_size, beta, train_loader, val_loader,
             validate, device, logger, epochs, lr, optim_str, sched_str,
-            patience, early_stop, log_interval, rank, num_devices, temp)
+            patience, early_stop, log_interval, plot_interval, rank, num_devices, temp)
 
 def predict(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, loss_function: nn.Module) -> tuple([float, float]):
@@ -573,7 +598,17 @@ def compute_similarity_loss(model: nn.Module, device: torch.device,
 def get_sim_prob(alpha, beta):
     return torch.exp(-beta * alpha)
 
-def train_plots(train_vals: list([float]), val_vals: list([float]), 
+def train_loss_plot(iters: list([float]), train_vals: list([float]), 
+    save_dir: str) -> None:
+    plt.figure()
+    plt.plot(iters, train_vals, 'b-')
+    plt.xlabel('Epochs')
+    plt.ylabel('Training Loss')
+    plt.savefig(save_dir + '/train_loss_plot.png')
+    plt.close()
+
+
+def train_val_plots(train_vals: list([float]), val_vals: list([float]), 
     y_label: str, save_dir: str, change_epochs: list([int])) -> None:
     """Plotting loss or accuracy as a function of epoch number.
 
@@ -596,6 +631,7 @@ def train_plots(train_vals: list([float]), val_vals: list([float]),
     plt.xlabel('Epoch')
     plt.ylabel(y_label)
     plt.savefig(save_dir + '/' + y_label + '_plots')
+    plt.close()
 
 class AverageMeter():
     """Computes and stores the average and current value
