@@ -44,7 +44,7 @@ def get_args(parser):
                         help='Choice of model.')
     parser.add_argument('--load-path', type=str,
                         help='Path to the teacher model.')
-    parser.add_argument('--precision', type = str,choices = ['autocast','32','16'],default = '32',
+    parser.add_argument('--precision', type = str,choices = ['autocast','32','16','8'],default = '32',
                         help='Evaluate models in half precision')        
     parser.add_argument('--calculate-confusion', action='store_true',
                     help='Calculate confusion matrix along with accuracy.')                                                                    
@@ -57,6 +57,9 @@ def main():
     """Load arguments, the dataset, and initiate the training loop."""
     parser = argparse.ArgumentParser(description='Training the teacher model')
     args = get_args(parser)
+
+    if args.precision in ['8','4']:
+        args.device = 'cpu'
 
     #Set random seed
     torch.manual_seed(args.seed)

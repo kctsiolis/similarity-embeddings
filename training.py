@@ -410,8 +410,9 @@ def predict(model: nn.Module, device: torch.device,
         Model loss and accuracy on the evaluation dataset.
     
     """
-    model.eval() 
-    to_precision(model,precision)   
+    model.eval()     
+    model = to_precision(model,precision)   
+    
 
     loss = 0
     acc1 = 0
@@ -449,11 +450,24 @@ def predict(model: nn.Module, device: torch.device,
 def to_precision(object,precision):
     '''Move given object to given precision. Works with model + tensors'''
     if (precision == '32') or (precision == 'autocast'):
-        # Default - do nothing
-        return object        
+        pass    
     elif precision == '16':
-        object = object.half()
-        return object    
+        object = object.half()    
+    elif precision == '8':                
+        if isinstance(object,nn.Module):                        
+            object = torch.quantization.quantize_dynamic(
+                object, {nn.Conv2d,nn.Linear}, dtype=torch.qint8)              
+        
+    return object
+
+
+def print_size_of_model(model, label=""):
+    import os
+    torch.save(model.state_dict(), "temp.p")
+    size=os.path.getsize("temp.p")
+    print("model: ",label,' \t','Size (KB):', size/1e3)
+    os.remove('temp.p')
+    return size
         
 def compute_confusion(output,target):
     with torch.no_grad():
