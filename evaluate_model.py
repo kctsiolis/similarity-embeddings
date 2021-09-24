@@ -16,6 +16,8 @@ import argparse
 import torch
 from torch import nn
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sn
 from torch.utils import data
 from models import get_model
 from training import predict
@@ -43,7 +45,9 @@ def get_args(parser):
     parser.add_argument('--load-path', type=str,
                         help='Path to the teacher model.')
     parser.add_argument('--precision', type = str,choices = ['autocast','32','16'],default = '32',
-                        help='Evaluate models in half precision')                        
+                        help='Evaluate models in half precision')        
+    parser.add_argument('--calculate-confusion', action='store_true',
+                    help='Calculate confusion matrix along with accuracy.')                                                                    
 
     args = parser.parse_args()
 
@@ -80,15 +84,21 @@ def main():
     
 
     if args.split == 'train':
-        loss, acc1, acc5 = predict(model, device, loader1, nn.CrossEntropyLoss(),args.precision)
+        metrics = predict(model, device, loader1, nn.CrossEntropyLoss(),args.precision,args.calculate_confusion)
     elif args.split == 'val':
-        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision)
+        metrics = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision,args.calculate_confusion)
     else:
-        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision)
+        metrics = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision,args.calculate_confusion)
 
-    print('Loss: {:.6f}'.format(loss))
-    print('Top-1 Accuracy: {:.2f}'.format(acc1))
-    print('Top-5 Accuracy: {:.2f}'.format(acc5))
+    print('Loss: {:.6f}'.format(metrics[0]))
+    print('Top-1 Accuracy: {:.2f}'.format(metrics[1]))
+    print('Top-5 Accuracy: {:.2f}'.format(metrics[2]))
 
+    if args.calculate_confusion:
+        sn.heatmap(metrics[3],annot=True)
+        plt.savefig('confusion_matrix.png')
+        plt.close()
+        
+    
 if __name__ == '__main__':
     main()

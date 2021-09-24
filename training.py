@@ -18,6 +18,7 @@ import numpy as np
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
+from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 from data_augmentation import make_augmentation, Augmentation
 from logger import Logger
@@ -395,7 +396,7 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
             patience, early_stop, log_interval, plot_interval, rank, num_devices, temp)
 
 def predict(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str) -> tuple([float, float]):
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str,calculate_confusion:bool = False) -> tuple([float, float]):
     """Evaluate supervised model on data.
 
     Args:
@@ -415,6 +416,7 @@ def predict(model: nn.Module, device: torch.device,
     loss = 0
     acc1 = 0
     acc5 = 0
+    confusion = []
     with torch.no_grad():
         for data, target in loader:
             if precision == 'autocast':
@@ -428,13 +430,20 @@ def predict(model: nn.Module, device: torch.device,
                 loss += loss_function(output, target).item()
 
 
+            if calculate_confusion:
+                confusion.append(compute_confusion(output,target))                
+            
             cur_acc1, cur_acc5 = compute_accuracy(output, target)
             acc1 += cur_acc1
             acc5 += cur_acc5
     
     loss, acc1, acc5 = loss / len(loader), acc1 / len(loader), acc5 / len(loader)
-
-    return loss, acc1, acc5
+    
+    if calculate_confusion:                
+        confusion = np.mean(np.stack(confusion),axis = 0)        
+        return loss, acc1, acc5, confusion.round(2)
+    else:
+        return loss, acc1, acc5
 
 
 def to_precision(object,precision):
@@ -446,7 +455,13 @@ def to_precision(object,precision):
         object = object.half()
         return object    
         
+def compute_confusion(output,target):
+    with torch.no_grad():
+        _, pred = output.topk(1, 1, True, True)
+        pred = pred.t().squeeze(0)        
 
+        confusion = confusion_matrix(target.cpu().numpy(),pred.cpu().numpy(),normalize='true',labels = range(10) )
+    return confusion
 
 def compute_accuracy(output, target):
     with torch.no_grad():
