@@ -395,7 +395,7 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
             patience, early_stop, log_interval, plot_interval, rank, num_devices, temp)
 
 def predict(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module) -> tuple([float, float]):
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str) -> tuple([float, float]):
     """Evaluate supervised model on data.
 
     Args:
@@ -403,20 +403,31 @@ def predict(model: nn.Module, device: torch.device,
         device: Device to evaluate on.
         loader: Data to evaluate on.
         loss_function: Loss function being used.
+        precision: precision to evaluate model with
 
     Returns:
         Model loss and accuracy on the evaluation dataset.
     
     """
-    model.eval()
+    model.eval() 
+    to_precision(model,precision)   
+
     loss = 0
     acc1 = 0
     acc5 = 0
     with torch.no_grad():
         for data, target in loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            loss += loss_function(output, target).item()
+            if precision == 'autocast':
+                with torch.cuda.amp.autocast():
+                    data, target = data.to(device),target.to(device)
+                    output = model(data)            
+                    loss += loss_function(output, target).item()
+            else:
+                data, target = to_precision(data.to(device),precision),target.to(device)
+                output = model(data)            
+                loss += loss_function(output, target).item()
+
+
             cur_acc1, cur_acc5 = compute_accuracy(output, target)
             acc1 += cur_acc1
             acc5 += cur_acc5
@@ -424,6 +435,18 @@ def predict(model: nn.Module, device: torch.device,
     loss, acc1, acc5 = loss / len(loader), acc1 / len(loader), acc5 / len(loader)
 
     return loss, acc1, acc5
+
+
+def to_precision(object,precision):
+    '''Move given object to given precision. Works with model + tensors'''
+    if (precision == '32') or (precision == 'autocast'):
+        # Default - do nothing
+        return object        
+    elif precision == '16':
+        object = object.half()
+        return object    
+        
+
 
 def compute_accuracy(output, target):
     with torch.no_grad():

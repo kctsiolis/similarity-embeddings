@@ -18,8 +18,9 @@ from torch import nn
 import numpy as np
 from torch.utils import data
 from models import get_model
-from loaders import dataset_loader
 from training import predict
+from loaders import dataset_loader
+
 
 def get_args(parser):
     """Collect command line arguments."""
@@ -41,6 +42,8 @@ def get_args(parser):
                         help='Choice of model.')
     parser.add_argument('--load-path', type=str,
                         help='Path to the teacher model.')
+    parser.add_argument('--precision', type = str,choices = ['autocast','32','16'],default = '32',
+                        help='Evaluate models in half precision')                        
 
     args = parser.parse_args()
 
@@ -71,15 +74,17 @@ def main():
 
     model = get_model(
         args.model, load=True, load_path=args.load_path, 
-        one_channel=one_channel, num_classes=num_classes)
+        one_channel=one_channel, num_classes=num_classes)            
     model.to(device)
 
+    
+
     if args.split == 'train':
-        loss, acc1, acc5 = predict(model, device, loader1, nn.CrossEntropyLoss())
+        loss, acc1, acc5 = predict(model, device, loader1, nn.CrossEntropyLoss(),args.precision)
     elif args.split == 'val':
-        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss())
+        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision)
     else:
-        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss())
+        loss, acc1, acc5 = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision)
 
     print('Loss: {:.6f}'.format(loss))
     print('Top-1 Accuracy: {:.2f}'.format(acc1))
