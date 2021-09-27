@@ -1,5 +1,6 @@
 """Collection of classes and functions for neural network vision models."""
 
+from numpy.core.defchararray import mod
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -192,6 +193,18 @@ class ConvNetEmbedder(nn.Module):
     def get_dim(self):
         return self.dim
 
+class Projection(nn.Module):
+    def __init__(self,model: nn.Module,model_dim:int, projection_dim :int) -> None:
+        super().__init__()
+        self.model = model
+        self.projection = torch.randn([model_dim,projection_dim]) / projection_dim
+        self.projection.requires_grad = False
+
+    def forward(self,x):
+        x = torch.matmul(self.model(x),self.projection)
+        return x
+
+
 class Classifier(nn.Module):
     """Wrapper class for a classifier on top of an embedder.
     
@@ -304,7 +317,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet50_cifar_classifier':
         model = Classifier(Embedder(
             cifar_models.ResNet50(num_classes=num_classes), dim=2048,
-            batchnormalize=batchnormalize, track_running_stats=track_running_stats))
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats))            
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 
@@ -321,4 +334,16 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             track_running_stats=track_running_stats)
 
     return model
+
+class WrapWithProjection(nn.Module):
+    def __init__(self,model:nn.Module,model_output_dim:int,projection_dim:int) -> None:
+        super().__init__()
+        self.model = model
+        self.projection = torch.randn([model_output_dim,projection_dim]) / projection_dim
+        self.projection.requires_grad = False
+    
+    def forward(self,x):
+        x = torch.matmul(self.model(x), self.projection)
+        return x
+
 
