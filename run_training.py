@@ -25,7 +25,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 import numpy as np
-from models import get_model, Classifier
+from models import get_model, Classifier,WrapWithProjection
 from loaders import dataset_loader
 from training import get_trainer
 from logger import Logger
@@ -43,9 +43,9 @@ def get_args(parser):
                         help='number of epochs to train (default: 14)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
                         help='learning rate (default: 1.0)')
-    parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='adam',
+    parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
                         help='Choice of optimizer for training.')
-    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='plateau',
+    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='cosine',
                         help='Choice of scheduler for training.')
     parser.add_argument('--patience', type=int, default=5,
                         help='Patience used in Plateau scheduler.')
@@ -87,6 +87,12 @@ def get_args(parser):
                         help='Parameter of similarity probability function p(alpha).')
     parser.add_argument('--temp', type=float, default=0.01,
                         help='Temperature in sigmoid function converting similarity score to probability.')
+    parser.add_argument('--wrap_in_projection', action = 'store_true',
+                        help='Wrap the teacher model in a random projection (For distillation only)')                        
+    parser.add_argument('--projection_dim', type = int,default = None,
+                        help='Dimension to of projection to wrap the teacher model in')                        
+
+
 
     args = parser.parse_args()
 
@@ -137,6 +143,9 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
             args.teacher_model, load=True, load_path=args.load_path, 
             one_channel=one_channel, num_classes=num_classes, 
             get_embedder=get_embedder) 
+        if args.wrap_in_projection:
+            teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim)
+
         teacher.to(device)
     else:
         teacher = None
