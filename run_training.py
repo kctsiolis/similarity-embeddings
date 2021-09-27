@@ -87,9 +87,9 @@ def get_args(parser):
                         help='Parameter of similarity probability function p(alpha).')
     parser.add_argument('--temp', type=float, default=0.01,
                         help='Temperature in sigmoid function converting similarity score to probability.')
-    parser.add_argument('--wrap_in_projection', action = 'store_true',
+    parser.add_argument('--wrap-in-projection', action = 'store_true',
                         help='Wrap the teacher model in a random projection (For distillation only)')                        
-    parser.add_argument('--projection_dim', type = int,default = None,
+    parser.add_argument('--projection-dim', type = int,default = None,
                         help='Dimension to of projection to wrap the teacher model in')                        
 
 
