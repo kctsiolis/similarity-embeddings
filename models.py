@@ -224,7 +224,7 @@ class Classifier(nn.Module):
 
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
     one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, 
-    batchnormalize: bool = False, track_running_stats=True) -> nn.Module:
+    batchnormalize: bool = False, track_running_stats : bool =True, map_location = None) -> nn.Module:
     """Instantiate or load a specified model.
     
     Args:
@@ -236,6 +236,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         get_embedder: Whether or not to only get the feature embedding layers.
         batchnormalize: Whether or not to apply batch norm to the embeddings.
         track_running_stats: Which statistics to use for batch norm (if applicable).
+        map_location: if 'load' the device to load the model onto
 
     Returns:
         The desired model.
@@ -314,7 +315,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             except AttributeError:
                 model.load_state_dict(checkpoint['state_dict'])
         else:
-            model.load_state_dict(torch.load(load_path))
+            model.load_state_dict(torch.load(load_path,map_location=map_location))
     if get_embedder:
         model = Embedder(model, dim=dim, batchnormalize=batchnormalize,
             track_running_stats=track_running_stats)
