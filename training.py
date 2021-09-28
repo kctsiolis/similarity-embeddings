@@ -396,7 +396,7 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
             patience, early_stop, log_interval, plot_interval, rank, num_devices, temp)
 
 def predict(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str,calculate_confusion:bool = False) -> tuple([float, float]):
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str = '32',calculate_confusion:bool = False) -> tuple([float, float]):
     """Evaluate supervised model on data.
 
     Args:
