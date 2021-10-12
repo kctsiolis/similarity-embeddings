@@ -43,6 +43,7 @@ class Logger:
             verbose: Whether or not to print logger info to stdout.
 
         """
+        
         self.verbose = verbose
         if save:
             self.dir = make_log_dir(args)
@@ -58,7 +59,20 @@ class Logger:
         else:
             self.log_file = None
             self.results_file = None
-            self.model_path = None
+            self.model_path = None   
+
+
+            # Noah's hacky solution
+            self.dir = make_log_dir(args)
+            os.mkdir(self.dir)
+            self.log_path = os.path.join(self.dir, 'log.txt')
+            self.results_path = os.path.join(self.dir, 'results.txt')
+            self.model_path = os.path.join(self.dir, 'model.pt')
+            self.plots_dir = os.path.join(self.dir, 'plots')
+            os.mkdir(self.plots_dir)
+            self.log_file = open(self.log_path, 'w')
+            self.results_file = open(self.results_path, 'w')
+            # self.make_header(args)         
 
     def make_header(self, args: Namespace) -> None:
         """Start the log with a header giving general experiment info.
