@@ -60,7 +60,7 @@ def main():
 
     if args.precision in ['8','4']:
         args.device = 'cpu'
-
+    
     #Set random seed
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
