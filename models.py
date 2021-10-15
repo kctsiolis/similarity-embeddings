@@ -259,7 +259,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
 
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
-        dim = 512
+        dim = 512    
     elif model_str == 'resnet50':
         model = ResNet50(one_channel=one_channel, num_classes=num_classes)
         dim = 2048
@@ -296,6 +296,18 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         checkpoint = torch.load(load_path)
         model = ResNet50(num_classes=1000)
         dim = 2048
+    elif model_str == 'resnet_small_cifar':
+        model = cifar_models.ResNet3Layer(num_classes=num_classes)
+        dim = 256
+    elif model_str == 'resnet_small_cifar_embedder':
+        model = Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256, batchnormalize=batchnormalize,
+            track_running_stats=track_running_stats)   
+    elif model_str == 'simple':
+        model = cifar_models.SuperSimpleNet()             
+        dim = 84
+    elif model_str == 'simple_embedder':
+        model = Embedder(cifar_models.SuperSimpleNet(), dim=84, batchnormalize=batchnormalize,
+            track_running_stats=track_running_stats)                       
     elif model_str == 'resnet18_cifar':
         model = cifar_models.ResNet18(num_classes=num_classes)
         dim = 512
@@ -317,7 +329,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet50_cifar_classifier':
         model = Classifier(Embedder(
             cifar_models.ResNet50(num_classes=num_classes), dim=2048,
-            batchnormalize=batchnormalize, track_running_stats=track_running_stats))            
+            batchnormalize=batchnormalize, track_running_stats=track_running_stats))                   
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 
@@ -339,10 +351,10 @@ class WrapWithProjection(nn.Module):
     def __init__(self,model:nn.Module,model_output_dim:int,projection_dim:int) -> None:
         super().__init__()
         self.model = model
-        self.projection = torch.randn([model_output_dim,projection_dim]) / projection_dim
+        self.projection = nn.Parameter(torch.randn([model_output_dim,projection_dim]) / projection_dim)
         self.projection.requires_grad = False
     
-    def forward(self,x):
+    def forward(self,x):        
         x = torch.matmul(self.model(x), self.projection)
         return x
 

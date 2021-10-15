@@ -4,7 +4,7 @@ import numpy as np
 from embeddings import load_embeddings, save_embeddings
 
 def tsne(embs, labels, save_path, num_classes=None, plots_path=None):
-    t = TSNE()
+    t = TSNE(verbose= 1,n_jobs = -1)
     #Project to 2D space
     X_new = t.fit_transform(embs)
     save_embeddings(X_new, save_path)

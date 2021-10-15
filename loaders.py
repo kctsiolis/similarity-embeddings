@@ -39,6 +39,10 @@ def dataset_loader(dataset: str, batch_size: int,
         return cifar_loader(
             batch_size=batch_size, train_set_fraction=train_set_fraction,
             validate=validate, distributed=distributed)
+    elif dataset == 'cifar100':
+        return cifar_loader(
+            batch_size=batch_size, train_set_fraction=train_set_fraction,
+            validate=validate, distributed=distributed,cifar10 = False)
     elif dataset == 'tiny_imagenet':
         if not validate:
             raise ValueError('Test set not available for TinyImageNet.')
@@ -193,7 +197,7 @@ class TransformedDataset(Dataset):
 
 def cifar_loader(batch_size: int, 
     train_set_fraction: float = 1.0, validate: bool = True, 
-    distributed: bool = False,
+    distributed: bool = False, cifar10 : bool = True
     ) -> tuple([DataLoader, DataLoader]):
     """Load the CIFAR-10 training set and split into training and validation.
 
@@ -210,9 +214,12 @@ def cifar_loader(batch_size: int,
         Training and validation set loaders.
 
     """
-
-    train_set = datasets.CIFAR10(root='./data', train=True,
-        download=True)
+    if cifar10:
+        train_set = datasets.CIFAR10(root='./data', train=True,
+            download=True)
+    else:
+        train_set = datasets.CIFAR100(root='./data', train=True,
+            download=True)
     train_set_size = int(train_set_fraction * 50000)
 
     train_transforms = transforms.Compose([
@@ -241,8 +248,12 @@ def cifar_loader(batch_size: int,
         train_subset, _ = torch.utils.data.random_split(
             train_set, [train_set_size, 50000-train_set_size])
         train_transformed = TransformedDataset(train_subset, train_transforms)
-        test_set = datasets.CIFAR10(root='./data', train=False,
-        download=True, transform=test_transforms)
+        if cifar10:
+            test_set = datasets.CIFAR10(root='./data', train=False,
+                download=True, transform=test_transforms)
+        else:
+            test_set = datasets.CIFAR100(root='./data', train=False,
+                download=True, transform=test_transforms)
         test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
     if distributed:
