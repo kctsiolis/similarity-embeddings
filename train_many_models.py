@@ -129,10 +129,11 @@ def distill_many_students(base_teacher_path : str,teacher_type : str,student_typ
         print(f'Training a student on teacher from epoch {epoch}.')    
         
         time.sleep(5) # Give the past call a chance to make files and such 
-        device = devices[i % n_device]                                   
+        device = devices[i % n_device]   
+        validate = '--validate' if ((dataset == 'tiny_imagenet') or (dataset == 'imagenet')) else ''                                 
         bash_string = f"python3 run_training.py --mode distillation --lr 0.01 --optimizer adam --batch-size 128 --epochs 250 --early-stop 50 \
             --dataset {dataset}  --device {device} --teacher-model  {teacher_type} --load-path {load_path} --model {student_type} \
-            --cosine --distillation-type {distillation_type} "
+            --cosine --distillation-type {distillation_type} {validate}"
     
         if i % n_device == (n_device - 1):                              
             subprocess.run(bash_string,shell=True) # Note the 'run'. This causes it to wait            
