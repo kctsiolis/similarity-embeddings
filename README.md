@@ -15,6 +15,8 @@ this teacher model to something nicely named.
 Use the 'train_many_models' file. Provide the directory to the teachers and a few extra training options. I recommend you start with an empty log directory and when all students are trained move
 the students to some nicely named directory. 
 
+You probably want to provide more than 1 GPU for training at this stage. The multi-processing is kinda hacky but does work well for this application.
+
 - Add a linear classifier to the students
 
 This is neccessary if you trained the students via similarity. The scripts will rename your students based on information from the corresponding log file to match the epoch. 
