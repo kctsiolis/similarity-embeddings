@@ -9,7 +9,7 @@ Loosely based on code from PyTorch example
 https://github.com/pytorch/examples/blob/master/mnist/main.py
 
 """
-
+import os
 import torch
 import numpy as np
 from torch import nn
@@ -31,7 +31,7 @@ class Trainer():
             device: torch.device, logger: Logger, epochs: int = 250, 
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
-            early_stop: int = 10, log_interval: int = 10,
+            early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
             plot_interval: int = None,
             rank: int = 0, num_devices: int = 1):
         self.model = model
@@ -40,7 +40,7 @@ class Trainer():
         self.eval_set = 'Validation' if validate else 'Test'
         self.device = device
         self.epochs = epochs
-        self.lr = lr
+        self.lr = lr        
 
         if optim_str == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
@@ -61,12 +61,13 @@ class Trainer():
 
         self.early_stop = early_stop
         self.log_interval = log_interval
+        self.save_each_epoch = save_each_epoch
         if plot_interval is None:
             self.plot_interval = len(self.train_loader) // 10
         else:
             self.plot_interval = plot_interval
         self.logger = logger
-        self.model_path = logger.get_model_path()
+        self.model_path = logger.get_model_path()        
         self.plots_dir = logger.get_plots_dir()
         self.rank = rank
         self.num_devices = num_devices
@@ -116,11 +117,16 @@ class Trainer():
                 #Save the current model (as it is the best one so far)
                 if self.rank == 0:
                     if self.model_path is not None:
+                        if self.save_each_epoch:
+                            name, ext = os.path.splitext(self.model_path)                        
+                            current_model_path = f'{name}_epoch{epoch}{ext}'
+                        else:
+                            current_model_path = self.model_path
                         self.logger.log("Saving model...")
                         if self.num_devices > 1:
-                            torch.save(self.model.module.state_dict(), self.model_path)
+                            torch.save(self.model.module.state_dict(), current_model_path)
                         else:
-                            torch.save(self.model.state_dict(), self.model_path)
+                            torch.save(self.model.state_dict(), current_model_path)
                         self.logger.log("Model saved.\n")
 
             if self.sched_str == 'plateau':
@@ -174,13 +180,13 @@ class SupervisedTrainer(Trainer):
             device: torch.device, logger: Logger, epochs: int = 250,
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
-            early_stop: int = 10, log_interval: int = 10,
+            early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
             plot_interval: int = None, rank: int = 0, 
             num_devices: int = 1):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, plot_interval, rank, num_devices)
+            log_interval,save_each_epoch, plot_interval, rank, num_devices)
         self.loss_function = nn.CrossEntropyLoss()
 
     def train_epoch(self, epoch):
@@ -225,14 +231,14 @@ class DistillationTrainer(Trainer):
             epochs: int = 250, lr: float = 0.1, 
             optim_str: str = 'adam', sched_str: str = 'plateau', 
             patience: int = 5, early_stop: int = 10, 
-            log_interval: int = 10, plot_interval: int = None,
+            log_interval: int = 10,save_each_epoch : bool = False, plot_interval: int = None,
             rank: int = 0, num_devices: int = 1, cosine: bool = True, 
             distillation_type: str = 'similarity-based',
             c: float = 0.5):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, plot_interval, rank, num_devices)
+            log_interval, save_each_epoch,plot_interval, rank, num_devices)
         self.teacher = teacher
         self.cosine = cosine
         self.distillation_type = distillation_type
@@ -246,13 +252,13 @@ class DistillationTrainer(Trainer):
             self.c = c
 
     def train_epoch(self, epoch):
-        self.model.train()
+        self.model.train()        
         self.teacher.eval()
         train_loss = AverageMeter()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             data = data.to(self.device)
             target = target.to(self.device)
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad()            
             loss = self.compute_loss(data, target)
             train_loss.update(loss.item())
             loss.backward()
@@ -288,7 +294,7 @@ class DistillationTrainer(Trainer):
     def compute_loss(self, data, target):
         if self.distillation_type == 'similarity-based':
             student_sims, teacher_sims = get_student_teacher_similarity(
-                self.model, self.teacher, data, self.cosine)
+                self.model, self.teacher, data, self.cosine)            
             loss = self.loss_function(student_sims, teacher_sims)
         else:
             output = self.model(data)
@@ -307,17 +313,19 @@ class SimilarityTrainer(Trainer):
             logger: Logger, epochs: int = 250,
             lr: float = 0.1, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
-            early_stop: int = 10, log_interval: int = 10,
+            early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
             plot_interval: int = None, rank: int = 0, num_devices: int = 1,
-            temp: float = 0.01):
+            temp: float = 0.01,cosine: bool = True):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, plot_interval, rank, num_devices)
+            log_interval, save_each_epoch,plot_interval, rank, num_devices)
         self.augmentation = make_augmentation(
             aug, alpha_max=alpha_max, kernel_size=kernel_size, device=device)
         self.beta = beta
         self.temp = temp
+        self.cosine = cosine
+        self.loss_function = nn.MSELoss()
 
     def train_epoch(self, epoch):
         self.model.train()
@@ -372,7 +380,7 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
         logger: Logger, epochs: int = 250, 
         lr: float = 0.1, optim_str: str = 'adam', 
         sched_str: str = 'plateau', patience: int = 5, 
-        early_stop: int = 10, log_interval: int = 10,
+        early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
         plot_interval: int = None, rank: int = 0, num_devices: int = 1, 
         teacher_model: nn.Module = None, cosine: bool = True,
         distillation_type: str = 'similarity-based', c: float = 0.5,
@@ -382,18 +390,18 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
         return SupervisedTrainer(
             model, train_loader, val_loader, validate, device, logger,
             epochs, lr, optim_str, sched_str, patience, early_stop,
-            log_interval, plot_interval, rank, num_devices)
+            log_interval,save_each_epoch, plot_interval, rank, num_devices)
     elif mode == 'distillation':
         return DistillationTrainer(
             model, teacher_model, train_loader, val_loader, validate, device,
             logger, epochs, lr, optim_str, sched_str,
-            patience, early_stop, log_interval, plot_interval, rank, num_devices,
+            patience, early_stop, log_interval, save_each_epoch,plot_interval, rank, num_devices,
             cosine, distillation_type, c)
     else:
         return SimilarityTrainer(
             model, aug, alpha_max, kernel_size, beta, train_loader, val_loader,
             validate, device, logger, epochs, lr, optim_str, sched_str,
-            patience, early_stop, log_interval, plot_interval, rank, num_devices, temp)
+            patience, early_stop, log_interval,save_each_epoch, plot_interval, rank, num_devices, temp,cosine)
 
 def predict(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str = '32',calculate_confusion:bool = False) -> tuple([float, float]):
@@ -423,7 +431,7 @@ def predict(model: nn.Module, device: torch.device,
             if precision == 'autocast':
                 with torch.cuda.amp.autocast():
                     data, target = data.to(device),target.to(device)
-                    output = model(data)            
+                    output = model(data)                                
                     loss += loss_function(output, target).item()
             else:
                 data, target = to_precision(data.to(device),precision),target.to(device)
@@ -550,17 +558,17 @@ def get_student_teacher_similarity(student: nn.Module,
         The similarities output by the student and the teacher.
 
     """
-    student_embs = student(data)
+    student_embs = student(data)    
     if cosine:
-        student_embs = F.normalize(student_embs, p=2, dim=1)
-    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))
+        student_embs = F.normalize(student_embs, p=2, dim=1)             
+    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
 
     with torch.no_grad():
         teacher_embs = teacher(data)
         if cosine:
             teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
         teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
-
+    
     return student_sims, teacher_sims
     
 def get_model_similarity(model: nn.Module, data: torch.Tensor, 

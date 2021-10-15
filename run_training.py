@@ -35,7 +35,7 @@ def get_args(parser):
     parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'similarity',
         'linear_classifier', 'random'] ,metavar='D',
         help='Training mode.')
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet', 'tiny_imagenet'] ,metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'cifar100', 'imagenet', 'tiny_imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Batch size (default: 64)')
@@ -59,6 +59,8 @@ def get_args(parser):
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status.')
+    parser.add_argument('--save-each-epoch', action = 'store_true',
+                        help='Save model at each epoch rather than override model each time')                        
     parser.add_argument('--plot-interval', type=int,
                         help='how many batches to wait before plotting training loss.')
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
@@ -92,8 +94,6 @@ def get_args(parser):
     parser.add_argument('--projection-dim', type = int,default = None,
                         help='Dimension to of projection to wrap the teacher model in')                        
 
-
-
     args = parser.parse_args()
 
     return args
@@ -118,7 +118,10 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         num_classes = 1000
     elif args.dataset == 'tiny_imagenet':
         num_classes = 200
+    elif args.dataset == 'cifar100':
+        num_classes = 100
     else:
+        # Cifar10  or MNIST
         num_classes = 10
     
     if args.mode == 'teacher' or args.mode == 'random':
@@ -139,14 +142,13 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     if args.mode == 'distillation':
         get_embedder = args.distillation_type == 'similarity-based'
+        get_embedder = False        
         teacher = get_model(
             args.teacher_model, load=True, load_path=args.load_path, 
             one_channel=one_channel, num_classes=num_classes, 
-            get_embedder=get_embedder) 
+            get_embedder=get_embedder).to(device) 
         if args.wrap_in_projection:
-            teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim)
-
-        teacher.to(device)
+            teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim).to(device)        
     else:
         teacher = None
 
@@ -158,7 +160,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     trainer = get_trainer(
         args.mode, model, train_loader, val_loader, args.validate,
         device, logger, args.epochs, args.lr, args.optimizer, args.scheduler,
-        args.patience, args.early_stop, args.log_interval, args.plot_interval, 
+        args.patience, args.early_stop, args.log_interval,args.save_each_epoch, args.plot_interval, 
         idx, num_gpus, teacher, args.cosine, args.distillation_type, args.c,
         args.augmentation, args.alpha_max, args.kernel_size, args.beta, 
         args.temp)
