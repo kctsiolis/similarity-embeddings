@@ -92,6 +92,7 @@ class Logger:
         self.log('Learning Rate : {}'.format(args.lr))
         self.log('Optimizer: {}'.format(args.optimizer))
         self.log('Scheduler: {}'.format(args.scheduler))
+        self.log('Learning Rate Warmup Iters: {}'.format(args.lr_warmup_iters))
         self.log('Training Set Fraction: {}'.format(args.train_set_fraction))
         self.log('Validate: {}'.format(args.validate))
         self.log('Seed: {}'.format(args.seed))

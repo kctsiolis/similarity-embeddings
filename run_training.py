@@ -55,6 +55,8 @@ def get_args(parser):
                         help='Fraction of training set to train on.')
     parser.add_argument('--validate', action='store_true',
                         help='Evaluate on a held out validation set (as opposed to the test set).')
+    parser.add_argument('--lr-warmup-iters', type=int, default=0,
+                        help='Number of iterations (batches) over which to perform learning rate warmup.')
     parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
@@ -159,7 +161,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     trainer = get_trainer(
         args.mode, model, train_loader, val_loader, args.validate,
-        device, logger, args.epochs, args.lr, args.optimizer, args.scheduler,
+        device, logger, args.epochs, args.lr, args.lr_warmup_iters, args.optimizer, args.scheduler,
         args.patience, args.early_stop, args.log_interval,args.save_each_epoch, args.plot_interval, 
         idx, num_gpus, teacher, args.cosine, args.distillation_type, args.c,
         args.augmentation, args.alpha_max, args.kernel_size, args.beta, 

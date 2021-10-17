@@ -29,7 +29,7 @@ class Trainer():
             self, model: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, validate: bool, 
             device: torch.device, logger: Logger, epochs: int = 250, 
-            lr: float = 0.1, optim_str: str = 'adam', 
+            lr: float = 0.1, lr_warmup_iters: int = 0, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
             plot_interval: int = None,
@@ -40,7 +40,9 @@ class Trainer():
         self.eval_set = 'Validation' if validate else 'Test'
         self.device = device
         self.epochs = epochs
-        self.lr = lr        
+        self.itr = 0
+        self.lr = lr    
+        self.lr_warmup_iters = lr_warmup_iters  
 
         if optim_str == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
@@ -80,6 +82,15 @@ class Trainer():
         self.val_accs = []
         self.train_accs5 = []
         self.val_accs5 = []
+
+    def lr_warmup_factor(self):
+        return min(float(self.itr + 1) / max(self.lr_warmup_iters, 1), 1.0)
+
+    def update_lr(self):
+        if self.itr < self.lr_warmup_iters:
+            self.lr = self.lr * self.lr_warmup_factor()
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.lr
 
     def train(self):
         epochs_until_stop = self.early_stop
@@ -178,14 +189,14 @@ class SupervisedTrainer(Trainer):
             self, model: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, validate: bool, 
             device: torch.device, logger: Logger, epochs: int = 250,
-            lr: float = 0.1, optim_str: str = 'adam', 
+            lr: float = 0.1, lr_warmup_iters: int = 0, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
             plot_interval: int = None, rank: int = 0, 
             num_devices: int = 1):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
-            epochs, lr, optim_str, sched_str, patience, early_stop,
+            epochs, lr, lr_warmup_iters, optim_str, sched_str, patience, early_stop,
             log_interval,save_each_epoch, plot_interval, rank, num_devices)
         self.loss_function = nn.CrossEntropyLoss()
 
@@ -195,6 +206,7 @@ class SupervisedTrainer(Trainer):
         train_top1_acc = AverageMeter()
         train_top5_acc = AverageMeter()
         for batch_idx, (data, target) in enumerate(self.train_loader):
+            self.update_lr()
             data, target = data.to(self.device), target.to(self.device)
             self.optimizer.zero_grad()
             output = self.model(data)
@@ -216,6 +228,7 @@ class SupervisedTrainer(Trainer):
             if batch_idx % self.plot_interval == 0:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
+            self.itr += 1
 
         return train_loss.get_avg(), train_top1_acc.get_avg(), train_top5_acc.get_avg()
 
@@ -228,7 +241,7 @@ class DistillationTrainer(Trainer):
             self, model: nn.Module, teacher: nn.Module,
             train_loader: DataLoader, val_loader: DataLoader, 
             validate: bool, device: torch.device, logger: Logger, 
-            epochs: int = 250, lr: float = 0.1, 
+            epochs: int = 250, lr: float = 0.1, lr_warmup_iters: int = 0,
             optim_str: str = 'adam', sched_str: str = 'plateau', 
             patience: int = 5, early_stop: int = 10, 
             log_interval: int = 10,save_each_epoch : bool = False, plot_interval: int = None,
@@ -237,7 +250,7 @@ class DistillationTrainer(Trainer):
             c: float = 0.5):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
-            epochs, lr, optim_str, sched_str, patience, early_stop,
+            epochs, lr, lr_warmup_iters, optim_str, sched_str, patience, early_stop,
             log_interval, save_each_epoch,plot_interval, rank, num_devices)
         self.teacher = teacher
         self.cosine = cosine
@@ -256,6 +269,7 @@ class DistillationTrainer(Trainer):
         self.teacher.eval()
         train_loss = AverageMeter()
         for batch_idx, (data, target) in enumerate(self.train_loader):
+            self.update_lr()
             data = data.to(self.device)
             target = target.to(self.device)
             self.optimizer.zero_grad()            
@@ -274,6 +288,7 @@ class DistillationTrainer(Trainer):
             if batch_idx % self.plot_interval == 0:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
+            self.itr += 1
         
         return train_loss.get_avg(), None, None
 
@@ -311,14 +326,14 @@ class SimilarityTrainer(Trainer):
             kernel_size: int, beta: float, train_loader: DataLoader, 
             val_loader: DataLoader, validate: bool, device: torch.device, 
             logger: Logger, epochs: int = 250,
-            lr: float = 0.1, optim_str: str = 'adam', 
+            lr: float = 0.1, lr_warmup_iters: int = 0, optim_str: str = 'adam', 
             sched_str: str = 'plateau', patience: int = 5, 
             early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
             plot_interval: int = None, rank: int = 0, num_devices: int = 1,
             temp: float = 0.01,cosine: bool = True):
         super().__init__(
             model, train_loader, val_loader, validate, device, logger,
-            epochs, lr, optim_str, sched_str, patience, early_stop,
+            epochs, lr, lr_warmup_iters, optim_str, sched_str, patience, early_stop,
             log_interval, save_each_epoch,plot_interval, rank, num_devices)
         self.augmentation = make_augmentation(
             aug, alpha_max=alpha_max, kernel_size=kernel_size, device=device)
@@ -331,6 +346,7 @@ class SimilarityTrainer(Trainer):
         self.model.train()
         train_loss = AverageMeter()
         for batch_idx, (data, _) in enumerate(self.train_loader):
+            self.update_lr()
             data = data.to(self.device)
             self.optimizer.zero_grad()
             
@@ -367,6 +383,7 @@ class SimilarityTrainer(Trainer):
             if batch_idx % self.plot_interval == 0:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
+            self.itr += 1
 
         return train_loss.get_avg(), None, None
 
@@ -378,7 +395,7 @@ class SimilarityTrainer(Trainer):
 def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader, 
         val_loader: DataLoader, validate: bool, device: torch.device, 
         logger: Logger, epochs: int = 250, 
-        lr: float = 0.1, optim_str: str = 'adam', 
+        lr: float = 0.1, lr_warmup_iters: int = 1000, optim_str: str = 'adam', 
         sched_str: str = 'plateau', patience: int = 5, 
         early_stop: int = 10, log_interval: int = 10,save_each_epoch : bool = False,
         plot_interval: int = None, rank: int = 0, num_devices: int = 1, 
@@ -389,18 +406,18 @@ def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader,
     if mode == 'teacher' or mode == 'linear_classifier' or mode == 'random':
         return SupervisedTrainer(
             model, train_loader, val_loader, validate, device, logger,
-            epochs, lr, optim_str, sched_str, patience, early_stop,
+            epochs, lr, lr_warmup_iters, optim_str, sched_str, patience, early_stop,
             log_interval,save_each_epoch, plot_interval, rank, num_devices)
     elif mode == 'distillation':
         return DistillationTrainer(
             model, teacher_model, train_loader, val_loader, validate, device,
-            logger, epochs, lr, optim_str, sched_str,
+            logger, epochs, lr, lr_warmup_iters, optim_str, sched_str,
             patience, early_stop, log_interval, save_each_epoch,plot_interval, rank, num_devices,
             cosine, distillation_type, c)
     else:
         return SimilarityTrainer(
             model, aug, alpha_max, kernel_size, beta, train_loader, val_loader,
-            validate, device, logger, epochs, lr, optim_str, sched_str,
+            validate, device, logger, epochs, lr, lr_warmup_iters, optim_str, sched_str,
             patience, early_stop, log_interval,save_each_epoch, plot_interval, rank, num_devices, temp,cosine)
 
 def predict(model: nn.Module, device: torch.device, 
