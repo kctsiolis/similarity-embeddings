@@ -40,31 +40,31 @@ def get_args(parser):
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
         help='Batch size (default: 64)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
-                        help='number of epochs to train (default: 14)')
+                        help='number of epochs to train (default: 50)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
-                        help='learning rate (default: 1.0)')
+                        help='learning rate (default: 0.1)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
-                        help='Choice of optimizer for training.')
+                        help='Choice of optimizer for training (default: sgd).')
     parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='cosine',
                         help='Choice of scheduler for training.')
-    parser.add_argument('--patience', type=int, default=5,
+    parser.add_argument('--plateau-patience', type=int, default=5,
                         help='Patience used in Plateau scheduler.')
-    parser.add_argument('--seed', type=int, default=1, metavar='S',
-                        help='random seed (default: 1)')
+    parser.add_argument('--seed', type=int, default=42, metavar='S',
+                        help='random seed (default: 42)')
     parser.add_argument('--train-set-fraction', type=float, default=1.0,
-                        help='Fraction of training set to train on.')
+                        help='Fraction of training set to train on (default: 1.0).')
     parser.add_argument('--validate', action='store_true',
                         help='Evaluate on a held out validation set (as opposed to the test set).')
     parser.add_argument('--lr-warmup-iters', type=int, default=0,
-                        help='Number of iterations (batches) over which to perform learning rate warmup.')
+                        help='Number of iterations (batches) over which to perform learning rate warmup (default: 0).')
     parser.add_argument('--early-stop', type=int, default=10, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status.')
+                        help='Frequency of loss logging in terms of number of iterations (default: 10).')
     parser.add_argument('--save-each-epoch', action = 'store_true',
                         help='Save model at each epoch rather than override model each time')                        
     parser.add_argument('--plot-interval', type=int,
-                        help='how many batches to wait before plotting training loss.')
+                        help='Number of iterations between updates of loss plot.')
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
                         help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
                             Can also specify multiple devices (separated by spaces) for multiprocessing.')
@@ -72,7 +72,7 @@ def get_args(parser):
                         help='Path to the teacher model.')
     parser.add_argument('--teacher-model', type=str, default=None,
                         help='Choice of teacher model (for distillation only).')
-    parser.add_argument('--model', type=str, 
+    parser.add_argument('--student-model', type=str, 
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
@@ -80,9 +80,9 @@ def get_args(parser):
                         default='similarity-based',
                         help='Use cosine similarity in the distillation loss.')
     parser.add_argument('-c', type=float, default=0.5,
-                        help='Weighing of soft target and hard target loss in vanilla distillation.')
+                        help='Weighing of soft target and hard target loss in class-probs distillation.')
     parser.add_argument('--augmentation', type=str, choices=['blur', 'jitter', 'crop'], default=None,
-                        help='Augmentation to use.')
+                        help='Data augmentation to use for similarity embedding training.')
     parser.add_argument('--alpha-max', type=float, default=1.0,
                         help='Largest possible augmentation strength.')
     parser.add_argument('--kernel-size', type=int, default=None,
@@ -127,15 +127,15 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         num_classes = 10
     
     if args.mode == 'teacher' or args.mode == 'random':
-        model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
+        model = get_model(args.student_model, one_channel=one_channel, num_classes=num_classes)
     elif args.mode == 'linear_classifier':
         model = get_model(
-            args.model, load=True, load_path=args.load_path,
+            args.student_model, load=True, load_path=args.load_path,
             one_channel=one_channel, num_classes=num_classes)
     elif args.mode == 'distillation' and args.distillation_type == 'class-probs':
-        model = get_model(args.model, one_channel=one_channel, num_classes=num_classes)
+        model = get_model(args.student_model, one_channel=one_channel, num_classes=num_classes)
     else:
-        model = get_model(args.model, one_channel=one_channel, get_embedder=True)
+        model = get_model(args.student_model, one_channel=one_channel, get_embedder=True)
     
     if args.mode == 'linear_classifier' or args.mode == 'random':
         model = Classifier(model, num_classes=num_classes)
@@ -159,13 +159,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         if args.mode == 'distillation':
             teacher = DistributedDataParallel(teacher, device_ids=[device])
 
-    trainer = get_trainer(
-        args.mode, model, train_loader, val_loader, args.validate,
-        device, logger, args.epochs, args.lr, args.lr_warmup_iters, args.optimizer, args.scheduler,
-        args.patience, args.early_stop, args.log_interval,args.save_each_epoch, args.plot_interval, 
-        idx, num_gpus, teacher, args.cosine, args.distillation_type, args.c,
-        args.augmentation, args.alpha_max, args.kernel_size, args.beta, 
-        args.temp)
+    trainer = get_trainer(model, train_loader, val_loader, device, logger, idx, args)
 
     trainer.train()
 
