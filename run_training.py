@@ -159,7 +159,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         if args.mode == 'distillation':
             teacher = DistributedDataParallel(teacher, device_ids=[device])
 
-    trainer = get_trainer(model, train_loader, val_loader, device, logger, idx, args)
+    trainer = get_trainer(args.mode, model, teacher, train_loader, val_loader, device, logger, idx, args)
 
     trainer.train()
 

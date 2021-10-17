@@ -40,9 +40,9 @@ class Trainer():
         self.lr = args.lr    
         self.lr_warmup_iters = args.lr_warmup_iters  
 
-        if args.optim_str == 'adam':
+        if args.optimizer == 'adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=args.lr)
-        elif args.optim_str == 'sgd':
+        elif args.optimizer == 'sgd':
             self.optimizer = optim.SGD(
                 self.model.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
         else:
@@ -227,12 +227,12 @@ class SupervisedTrainer(Trainer):
 
 class DistillationTrainer(Trainer):
     def __init__(
-            self, model: nn.Module, train_loader: DataLoader, 
+            self, model: nn.Module, teacher: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, logger: Logger,
             rank: int, args: Namespace):
         super().__init__(
             model, train_loader, val_loader, device, logger, rank, args)
-        self.teacher = args.teacher_model
+        self.teacher = teacher
         self.cosine = args.cosine
         self.distillation_type = args.distillation_type
         if self.distillation_type == 'similarity-based':
@@ -365,15 +365,15 @@ class SimilarityTrainer(Trainer):
             self.model, self.device, self.val_loader, self.loss_function,
             self.aug, self.alpha_max, self.beta, self.cosine, self.temp), None, None
 
-def get_trainer(mode: str, model: nn.Module, train_loader: DataLoader, 
-        val_loader: DataLoader, device: torch.device, 
+def get_trainer(mode: str, model: nn.Module, teacher: nn.Module, 
+        train_loader: DataLoader, val_loader: DataLoader, device: torch.device, 
         logger: Logger, rank: int, args: Namespace):
     if mode == 'teacher' or mode == 'linear_classifier' or mode == 'random':
         return SupervisedTrainer(
             model, train_loader, val_loader, device, logger, rank, args)
     elif mode == 'distillation':
         return DistillationTrainer(
-            model, train_loader, val_loader, device, logger, rank, args)
+            model, teacher, train_loader, val_loader, device, logger, rank, args)
     else:
         return SimilarityTrainer(
             model, train_loader, val_loader, device, logger, rank, args)

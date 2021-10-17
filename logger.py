@@ -97,10 +97,11 @@ class Logger:
         self.log('Validate: {}'.format(args.validate))
         self.log('Seed: {}'.format(args.seed))
         self.log('Max Epochs: {}'.format(args.epochs))
-        self.log('Scheduler Patience: {}'.format(args.patience))
+        if args.scheduler == 'plateau':
+            self.log('Scheduler Patience: {}'.format(args.plateau_patience))
         self.log('Early Stopping Patience: {}'.format(args.early_stop))
         self.log('Device: {}'.format(args.device))
-        self.log('Model: {}'.format(args.model))
+        self.log('Model: {}'.format(args.student_model))
         if args.mode == 'distillation':
             self.log('Teacher Model: {}'.format(args.teacher_model))
         if args.mode == 'distillation' or args.mode == 'linear_classifier':
@@ -153,7 +154,7 @@ def make_log_dir(args: Namespace) -> None:
     """
 
     exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(
-        args.mode, args.dataset, args.batch_size, args.lr, args.optimizer, args.seed, args.model)
+        args.mode, args.dataset, args.batch_size, args.lr, args.optimizer, args.seed, args.student_model)
     if args.mode == 'similarity' or args.mode == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
     if args.mode == 'similarity':
