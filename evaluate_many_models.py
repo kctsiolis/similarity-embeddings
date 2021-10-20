@@ -88,7 +88,7 @@ def evaluate_model(path : str,model_type : str,device:str,dataset : str):
     model = model_type
     batch_size = 128
     train_set_fraction = 1
-    validate = False    
+    validate = True if ((dataset == 'imagenet') or (dataset == 'tiny_imagenet')) else False    
     precision = '32'
     split = 'test'
     
@@ -116,6 +116,7 @@ def evaluate_model(path : str,model_type : str,device:str,dataset : str):
     else:
         num_classes = 10
 
+        
     model = get_model(
         model, load=True, load_path=model_path,
         one_channel=one_channel, num_classes=num_classes)            
