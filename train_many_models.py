@@ -114,7 +114,7 @@ def distill_many_students(base_teacher_path : str,teacher_type : str,student_typ
     
     distillation_type = 'similarity-based' if sim_distillation else 'class-probs'
     n_device = len(devices)
-    validate = '--validate' if ((dataset == 'tiny_imagenet') or (dataset == 'imagenet')) else ''                                 
+    validate = '--validate' if ((dataset == 'tiny_imagenet') or (dataset == 'imagenet')) else ''                        
     i = -1
     for obj in zip(epoch_numbers,teacher_models):
         epoch,teacher_path = obj

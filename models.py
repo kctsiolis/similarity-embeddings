@@ -275,7 +275,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet50_classifier':
         model = Classifier(Embedder(ResNet50(one_channel=one_channel,
             num_classes=num_classes), batchnormalize=batchnormalize, 
-            track_running_stats=track_running_stats))
+            track_running_stats=track_running_stats),num_classes=num_classes)        
     elif model_str == 'resnet18_classifier':        
         model = Classifier(Embedder(ResNet18(one_channel=one_channel,
             num_classes=num_classes), batchnormalize=batchnormalize, 
@@ -336,7 +336,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             batchnormalize=batchnormalize, track_running_stats=track_running_stats))                   
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
-
+        
     if load:
         if checkpointing:
             try:
