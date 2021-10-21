@@ -120,7 +120,7 @@ def distill_many_students(base_teacher_path : str,teacher_type : str,student_typ
         epoch,teacher_path = obj
         
         # Restarting the process — some error caused models to not be trained past certain epoch
-        if (epoch <= 31) or (epoch >= 203):
+        if (epoch >= 34) and (epoch <= 73):
             continue 
         else:
             i += 1 
@@ -132,7 +132,7 @@ def distill_many_students(base_teacher_path : str,teacher_type : str,student_typ
         time.sleep(15) # Give the past call a chance to make files and such 
         device = devices[i % n_device]   
         bash_string = f"python3 run_training.py --mode distillation --lr 0.01 --optimizer adam --batch-size 128 --epochs 250 --early-stop 50 \
-            --dataset {dataset}  --device {device} --teacher-model  {teacher_type} --load-path {load_path} --model {student_type} \
+            --dataset {dataset}  --device {device} --teacher-model  {teacher_type} --load-path {load_path} --student-model {student_type} \
             --cosine --distillation-type {distillation_type} {validate}"
     
         if i % n_device == (n_device - 1):                              
