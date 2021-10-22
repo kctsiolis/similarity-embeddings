@@ -93,7 +93,7 @@ def add_linear_classifier_to_many(student_type : str,path_list : list,epoch_numb
                             
         device = devices[i % n_device]                
         bash_string = f"python3 run_training.py --mode linear_classifier --dataset {dataset} --device {device} \
-                --load-path {load_path} --model {student_type} \
+                --load-path {load_path} --student-model {student_type} \
                 --lr 0.1 --optimizer sgd --batch-size 128 --epochs {epochs} --early-stop 25 {validate}"  
     
         if i % n_device == (n_device - 1):                              

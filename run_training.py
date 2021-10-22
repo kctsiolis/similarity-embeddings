@@ -10,7 +10,7 @@ Modes supported:
 Models supported:
     ResNet18
     ResNet50
-    ResNet152
+    ResNet152arg
 
 Datasets supported:
     MNIST
