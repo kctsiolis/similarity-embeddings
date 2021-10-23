@@ -16,6 +16,7 @@ import numpy as np
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
+import math                                       
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
@@ -234,6 +235,8 @@ class DistillationTrainer(Trainer):
             model, train_loader, val_loader, device, logger, rank, args)
         self.teacher = teacher
         self.cosine = args.cosine
+        self.margin = args.margin
+        self.margin_value = args.margin_value
         self.distillation_type = args.distillation_type
         if self.distillation_type == 'similarity-based':
             self.loss_function = nn.MSELoss()
@@ -289,8 +292,9 @@ class DistillationTrainer(Trainer):
     def compute_loss(self, data, target):
         if self.distillation_type == 'similarity-based':
             student_sims, teacher_sims = get_student_teacher_similarity(
-                self.model, self.teacher, data, self.cosine)            
-            loss = self.loss_function(student_sims, teacher_sims)
+                self.model, self.teacher, data, self.cosine,self.margin,self.margin_value)            
+            
+            loss = self.loss_function(student_sims, teacher_sims)        
         else:
             output = self.model(data)
             model_probs = nn.LogSoftmax(dim=1)(output)
@@ -519,7 +523,7 @@ def get_labels(loader: torch.utils.data.DataLoader) -> np.ndarray:
     return labels
 
 def get_student_teacher_similarity(student: nn.Module, 
-    teacher: nn.Module, data: torch.Tensor, cosine: bool,
+    teacher: nn.Module, data: torch.Tensor, cosine: bool,margin : bool , margin_value : float
     ) -> tuple([torch.Tensor, torch.Tensor]):
     """Get similarities between instances, as given by student and teacher
 
@@ -533,10 +537,28 @@ def get_student_teacher_similarity(student: nn.Module,
         The similarities output by the student and the teacher.
 
     """
+    if not cosine:
+        margin = False
+
+
     student_embs = student(data)    
+    # print('*' * 80)
+    # print('Embs')
+    # print(torch.sum(torch.isnan(student_embs)))    
     if cosine:
-        student_embs = F.normalize(student_embs, p=2, dim=1)             
+        student_embs = F.normalize(student_embs, p=2, dim=1)           
+
     student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
+
+    if margin:         
+        # Using the identity cos(x +- m) = cos(x)cos(m) -+ sin(m)sin(x)                
+        cosm = math.cos(margin_value)        
+        sinm = math.sin(margin_value)        
+        sine = torch.sqrt((1.0 - torch.pow(student_sims, 2)) + 1e-6).clamp(0,1) # add 1e-6 for numerical stability                                             
+        student_sims = student_sims * cosm - sinm * sine        
+        student_sims.fill_diagonal_(1) # We'll always be self-similiar         
+        
+
 
     with torch.no_grad():
         teacher_embs = teacher(data)
