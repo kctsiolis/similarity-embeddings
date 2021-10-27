@@ -107,18 +107,12 @@ class Logger:
         self.log('Model: {}'.format(args.student_model))
         if args.mode == 'distillation':
             self.log('Teacher Model: {}'.format(args.teacher_model))
-<<<<<<< HEAD
-        if args.teacher_path is not None:
-           self.log('Teacher Path: {}'.format(args.teacher_path))
-        if args.student_path is not None:
-            self.log('Student Path: {}'.format(args.student_path))
-=======
+            self.log('Teacher Path: {}'.format(args.teacher_path))
             self.log('Margin: {}'.format(args.margin))
             if args.margin:
                 self.log('Margin Value: {}'.format(args.margin_value))
-        if args.mode == 'distillation' or args.mode == 'linear_classifier':
-           self.log('Load Path: {}'.format(args.load_path))
->>>>>>> margin
+        if args.student_path is not None:
+            self.log('Student Path: {}'.format(args.student_path))
         if args.mode == 'similarity' or args.mode == 'distillation':
             self.log('Cosine Similarity: {}'.format(args.cosine))
         if args.mode == 'similarity':
