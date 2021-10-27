@@ -19,6 +19,9 @@ except FileNotFoundError:
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 LOGS_DIR = parsed_config['logs_dir']
 
+if not os.path.exists(LOGS_DIR):
+    os.mkdir(LOGS_DIR)
+
 class Logger:
     """Training status and results tracker.
 
@@ -104,6 +107,9 @@ class Logger:
         self.log('Model: {}'.format(args.student_model))
         if args.mode == 'distillation':
             self.log('Teacher Model: {}'.format(args.teacher_model))
+            self.log('Margin: {}'.format(args.margin))
+            if args.margin:
+                self.log('Margin Value: {}'.format(args.margin_value))
         if args.mode == 'distillation' or args.mode == 'linear_classifier':
            self.log('Load Path: {}'.format(args.load_path))
         if args.mode == 'similarity' or args.mode == 'distillation':
@@ -113,7 +119,7 @@ class Logger:
                 self.log('Temp: {}'.format(args.temp))
             self.log('Augmentation: {}'.format(args.augmentation))
             self.log('Alpha Max: {}'.format(args.alpha_max))
-            self.log('Beta: {}'.format(args.beta))
+            self.log('Beta: {}'.format(args.beta))            
 
     def log(self, string: str) -> None:
         """Write a string to the log.

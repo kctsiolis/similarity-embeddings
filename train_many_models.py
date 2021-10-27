@@ -17,6 +17,7 @@ def get_args(parser):
     parser.add_argument('--training-type',type = str,choices = ['distill','linear-classifier'],metavar='R',help = 'Rename models — needed if models haven\'t been renamed before')
     parser.add_argument('--base-model-type',type = str,help = 'What kind of models are stored in the base directory')
     parser.add_argument('--student-type',type = str)
+    parser.add_argument('--epochs',type = int,default = 250)
     parser.add_argument('--dataset',type = str,choices=['mnist', 'cifar', 'cifar100', 'imagenet', 'tiny_imagenet'])
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'], help='Name of CUDA device(s) being used - otherwise cpu')                               
  
@@ -61,7 +62,7 @@ def main():
         sorter = list(zip(*sorted(zip(epoch_numbers,teacher_models))))
         epoch_numbers, teacher_models = list(sorter[0]),list(sorter[1])
         
-        distill_many_students(base_teacher_path,args.base_model_type,args.student_type,epoch_numbers,teacher_models,sim_distillation=True,dataset = args.dataset,devices = args.device)
+        distill_many_students(base_teacher_path,args.base_model_type,args.student_type,epoch_numbers,teacher_models,sim_distillation=True,n_epochs = args.epochs,dataset = args.dataset,devices = args.device)
 
 def add_linear_classifier_to_many(student_type : str,path_list : list,epoch_numbers :list, dataset:str,devices : list):
     '''
@@ -101,7 +102,7 @@ def add_linear_classifier_to_many(student_type : str,path_list : list,epoch_numb
         else:              
             subprocess.Popen(bash_string,shell=True)            
     
-def distill_many_students(base_teacher_path : str,teacher_type : str,student_type : str,epoch_numbers :list ,teacher_models : list,sim_distillation : bool,dataset : str,devices : list):
+def distill_many_students(base_teacher_path : str,teacher_type : str,student_type : str,epoch_numbers :list ,teacher_models : list,sim_distillation : bool,n_epochs : int,dataset : str,devices : list):
     '''
     
     Train many students from trained teacher models
@@ -131,7 +132,7 @@ def distill_many_students(base_teacher_path : str,teacher_type : str,student_typ
         
         time.sleep(15) # Give the past call a chance to make files and such 
         device = devices[i % n_device]   
-        bash_string = f"python3 run_training.py --mode distillation --lr 0.01 --optimizer adam --batch-size 128 --epochs 250 --early-stop 50 \
+        bash_string = f"python3 run_training.py --mode distillation --lr 0.01 --optimizer adam --batch-size 128 --epochs {n_epochs} --early-stop 50 \
             --dataset {dataset}  --device {device} --teacher-model  {teacher_type} --load-path {load_path} --student-model {student_type} \
             --cosine --distillation-type {distillation_type} {validate}"
     
