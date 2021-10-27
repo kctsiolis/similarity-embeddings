@@ -174,3 +174,23 @@ def make_augmentation(
         return RandomCrop(
             alpha_min, alpha_max, device, random, simclr
         )
+
+#Inspired by get_simclr_pipeline_transform from https://github.com/sthalles/SimCLR/blob/master/data_aug/contrastive_learning_dataset.py
+class SimCLRTransform():
+    def __init__(self, size=32, s=1):
+        color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+        kernel_size = int(0.1*size)
+        self.kernel_size = kernel_size if kernel_size % 2 == 1 else kernel_size + 1
+        self.aug = transforms.Compose([
+            transforms.RandomResizedCrop(size=size),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply([color_jitter], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.GaussianBlur(kernel_size=self.kernel_size)])
+
+    def apply_transform(self, data):
+        for i, image in enumerate(data):
+            augmented_data = data.clone()
+            augmented_data[i,:,:,:] = self.aug(image)
+        return augmented_data
+    

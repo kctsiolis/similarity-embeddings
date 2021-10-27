@@ -78,7 +78,7 @@ def get_args(parser):
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--distillation-type', type=str, choices=['similarity-based', 'class-probs'],
+    parser.add_argument('--distillation-type', type=str, choices=['similarity-based', 'class-probs', 'simclr'],
                         default='similarity-based',
                         help='Use cosine similarity in the distillation loss.')
     parser.add_argument('-c', type=float, default=0.5,
@@ -140,9 +140,17 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         model = get_model(
             args.student_model, load=True, load_path=args.student_path,
             one_channel=one_channel, num_classes=num_classes)
-    elif args.mode == 'distillation' and args.distillation_type == 'class-probs':
+    elif args.mode == 'distillation':
+        get_embedder = args.distillation_type != 'class-probs'
         model = get_model(args.student_model, load=load_student,
-            load_path=args.student_path, one_channel=one_channel, num_classes=num_classes)
+            load_path=args.student_path, one_channel=one_channel, 
+            get_embedder=get_embedder, num_classes=num_classes)
+        teacher = get_model(
+            args.teacher_model, load=True, load_path=args.teacher_path, 
+            one_channel=one_channel, num_classes=num_classes, 
+            get_embedder=True).to(device) 
+        if args.wrap_in_projection:
+            teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim).to(device) 
     else:
         model = get_model(args.student_model, load=load_student,
             load_path=args.student_path, one_channel=one_channel, get_embedder=True)
@@ -153,14 +161,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     model.to(device)
 
     if args.mode == 'distillation':
-        get_embedder = args.distillation_type == 'similarity-based'                 
-        get_embedder = False
-        teacher = get_model(
-            args.teacher_model, load=True, load_path=args.teacher_path, 
-            one_channel=one_channel, num_classes=num_classes, 
-            get_embedder=True).to(device) 
-        if args.wrap_in_projection:
-            teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim).to(device)        
+        get_embedder = args.distillation_type != 'class-probs'              
+               
     else:
         teacher = None
 

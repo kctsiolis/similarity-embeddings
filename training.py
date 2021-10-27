@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
-from data_augmentation import make_augmentation, Augmentation
+from data_augmentation import make_augmentation, Augmentation, SimCLRTransform
 from logger import Logger
 
 class Trainer():
@@ -238,7 +238,7 @@ class DistillationTrainer(Trainer):
         self.margin = args.margin
         self.margin_value = args.margin_value
         self.distillation_type = args.distillation_type
-        if self.distillation_type == 'similarity-based':
+        if self.distillation_type != 'class-probs':
             self.loss_function = nn.MSELoss()
         else:
             self.loss_function = nn.KLDivLoss(reduction='batchmean')
@@ -251,10 +251,13 @@ class DistillationTrainer(Trainer):
         self.model.train()      
         self.teacher.eval()
         train_loss = AverageMeter()
+        aug = SimCLRTransform()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
             data = data.to(self.device)
             target = target.to(self.device)
+            if self.distillation_type == 'simclr':
+                data = aug.apply_transform(data)
             self.optimizer.zero_grad()            
             loss = self.compute_loss(data, target)
             train_loss.update(loss.item())
@@ -290,7 +293,7 @@ class DistillationTrainer(Trainer):
         return loss, None, None
 
     def compute_loss(self, data, target):
-        if self.distillation_type == 'similarity-based':
+        if self.distillation_type != 'class-probs':
             student_sims, teacher_sims = get_student_teacher_similarity(
                 self.model, self.teacher, data, self.cosine,self.margin,self.margin_value)            
             
