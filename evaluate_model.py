@@ -84,14 +84,12 @@ def main():
         one_channel=one_channel, num_classes=num_classes)            
     model.to(device)
 
-    
-
     if args.split == 'train':
-        metrics = predict(model, device, loader1, nn.CrossEntropyLoss(),args.precision,args.calculate_confusion)
+        metrics = predict(model, device, loader1, nn.CrossEntropyLoss(), args.precision, args.calculate_confusion)
     elif args.split == 'val':
-        metrics = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision,args.calculate_confusion)
+        metrics = predict(model, device, loader2, nn.CrossEntropyLoss(), args.precision, args.calculate_confusion)
     else:
-        metrics = predict(model, device, loader2, nn.CrossEntropyLoss(),args.precision,args.calculate_confusion)
+        metrics = predict(model, device, loader2, nn.CrossEntropyLoss(), args.precision, args.calculate_confusion)
 
     print('Loss: {:.6f}'.format(metrics[0]))
     print('Top-1 Accuracy: {:.2f}'.format(metrics[1]))
@@ -101,7 +99,6 @@ def main():
         sn.heatmap(metrics[3],annot=True)
         plt.savefig('confusion_matrix.png')
         plt.close()
-        
     
 if __name__ == '__main__':
     main()

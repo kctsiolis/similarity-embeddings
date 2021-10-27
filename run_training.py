@@ -10,7 +10,7 @@ Modes supported:
 Models supported:
     ResNet18
     ResNet50
-    ResNet152
+    ResNet152arg
 
 Datasets supported:
     MNIST
@@ -68,8 +68,10 @@ def get_args(parser):
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
                         help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
                             Can also specify multiple devices (separated by spaces) for multiprocessing.')
-    parser.add_argument('--load-path', type=str,
+    parser.add_argument('--teacher-path', type=str,
                         help='Path to the teacher model.')
+    parser.add_argument('--student-path', type=str,
+                        help='Path to the student model.')
     parser.add_argument('--teacher-model', type=str, default=None,
                         help='Choice of teacher model (for distillation only).')
     parser.add_argument('--student-model', type=str, 
@@ -125,30 +127,32 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     else:
         # Cifar10  or MNIST
         num_classes = 10
+
+    load_student = (args.student_path is not None)
     
     if args.mode == 'teacher' or args.mode == 'random':
         model = get_model(args.student_model, one_channel=one_channel, num_classes=num_classes)
     elif args.mode == 'linear_classifier':
         model = get_model(
-            args.student_model, load=True, load_path=args.load_path,
+            args.student_model, load=True, load_path=args.student_path,
             one_channel=one_channel, num_classes=num_classes)
     elif args.mode == 'distillation' and args.distillation_type == 'class-probs':
-        model = get_model(args.student_model, one_channel=one_channel, num_classes=num_classes)
+        model = get_model(args.student_model, load=load_student,
+            load_path=args.student_path, one_channel=one_channel, num_classes=num_classes)
     else:
-        model = get_model(args.student_model, one_channel=one_channel, get_embedder=True)
+        model = get_model(args.student_model, load=load_student,
+            load_path=args.student_path, one_channel=one_channel, get_embedder=True)
     
     if args.mode == 'linear_classifier' or args.mode == 'random':
         model = Classifier(model, num_classes=num_classes)
 
     model.to(device)
 
-    if args.mode == 'distillation':
-        get_embedder = args.distillation_type == 'similarity-based'
-        get_embedder = False        
+    if args.mode == 'distillation':   
         teacher = get_model(
-            args.teacher_model, load=True, load_path=args.load_path, 
+            args.teacher_model, load=True, load_path=args.teacher_path, 
             one_channel=one_channel, num_classes=num_classes, 
-            get_embedder=get_embedder).to(device) 
+            get_embedder=True).to(device) 
         if args.wrap_in_projection:
             teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim).to(device)        
     else:

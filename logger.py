@@ -104,8 +104,10 @@ class Logger:
         self.log('Model: {}'.format(args.student_model))
         if args.mode == 'distillation':
             self.log('Teacher Model: {}'.format(args.teacher_model))
-        if args.mode == 'distillation' or args.mode == 'linear_classifier':
-           self.log('Load Path: {}'.format(args.load_path))
+        if args.teacher_path is not None:
+           self.log('Teacher Path: {}'.format(args.teacher_path))
+        if args.student_path is not None:
+            self.log('Student Path: {}'.format(args.student_path))
         if args.mode == 'similarity' or args.mode == 'distillation':
             self.log('Cosine Similarity: {}'.format(args.cosine))
         if args.mode == 'similarity':

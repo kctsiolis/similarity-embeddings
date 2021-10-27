@@ -245,7 +245,7 @@ class DistillationTrainer(Trainer):
             self.c = args.c
 
     def train_epoch(self, epoch):
-        self.model.train()        
+        self.model.train()      
         self.teacher.eval()
         train_loss = AverageMeter()
         for batch_idx, (data, target) in enumerate(self.train_loader):
@@ -379,7 +379,8 @@ def get_trainer(mode: str, model: nn.Module, teacher: nn.Module,
             model, train_loader, val_loader, device, logger, rank, args)
 
 def predict(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module, precision:str = '32',calculate_confusion:bool = False) -> tuple([float, float]):
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
+    precision: str = '32', calculate_confusion: bool = False) -> tuple([float, float]):
     """Evaluate supervised model on data.
 
     Args:
@@ -410,7 +411,7 @@ def predict(model: nn.Module, device: torch.device,
                     loss += loss_function(output, target).item()
             else:
                 data, target = to_precision(data.to(device),precision),target.to(device)
-                output = model(data)            
+                output = model(data)         
                 loss += loss_function(output, target).item()
 
 
