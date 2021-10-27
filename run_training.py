@@ -148,7 +148,8 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     model.to(device)
 
-    if args.mode == 'distillation':   
+    if args.mode == 'distillation':
+        get_embedder = args.distillation_type == 'similarity-based'                 
         teacher = get_model(
             args.teacher_model, load=True, load_path=args.teacher_path, 
             one_channel=one_channel, num_classes=num_classes, 
