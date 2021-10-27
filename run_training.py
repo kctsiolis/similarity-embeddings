@@ -97,6 +97,10 @@ def get_args(parser):
                         help='Wrap the teacher model in a random projection (For distillation only)')                        
     parser.add_argument('--projection-dim', type = int,default = None,
                         help='Dimension to of projection to wrap the teacher model in')                        
+    parser.add_argument('--margin', action = 'store_true',
+                        help='(For cosine distillation only) Should angular margin be applied ')
+    parser.add_argument('--margin-value', type = float,default = 0.5,
+                        help='If [margin] is selected what should it be set to (Default 0.5)')                                                    
 
     args = parser.parse_args()
 
@@ -150,6 +154,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
 
     if args.mode == 'distillation':
         get_embedder = args.distillation_type == 'similarity-based'                 
+        get_embedder = False
         teacher = get_model(
             args.teacher_model, load=True, load_path=args.teacher_path, 
             one_channel=one_channel, num_classes=num_classes, 
