@@ -99,6 +99,10 @@ def get_args(parser):
                         help='Dimension to of projection to wrap the teacher model in')                        
     parser.add_argument('--margin', action = 'store_true',
                         help='(For cosine distillation only) Should angular margin be applied ')
+    parser.add_argument('--truncate-model', action = 'store_true',
+                        help='Should we truncate the (student) model when training a linear classifier?')                        
+    parser.add_argument('--truncation-level', type =int,
+                        help='How many layers to remove to form the truncated (student) model')                                                
     parser.add_argument('--margin-value', type = float,default = 0.5,
                         help='If [margin] is selected what should it be set to (Default 0.5)')                                                    
 
@@ -139,7 +143,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     elif args.mode == 'linear_classifier':
         model = get_model(
             args.student_model, load=True, load_path=args.student_path,
-            one_channel=one_channel, num_classes=num_classes)
+            one_channel=one_channel, num_classes=num_classes,truncate_model = args.truncate_model,truncation_level = args.truncation_level)
     elif args.mode == 'distillation':
         get_embedder = args.distillation_type != 'class-probs'
         model = get_model(args.student_model, load=load_student,

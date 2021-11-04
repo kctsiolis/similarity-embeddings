@@ -157,6 +157,62 @@ class Embedder(nn.Module):
     def get_dim(self):
         return self.dim
 
+
+class TruncatedNet(nn.Module):
+    """A wrapper class to truncate another model. (A slight reskin of the Embedder class)            
+
+    Attributes:
+        features: The feature embedder.
+        dim: Embedding dimension.
+
+    """
+    def __init__(self, model,n, dim=None, batchnormalize=False,
+        track_running_stats=True):
+        """Instantiate object of class Embedder.
+
+        Args:
+            model: A model with a classification layer (which will be removed).
+            n: number of layers to shave off
+            dim: The embedding dimension of the model.
+            batchnormalize: Whether or not to add batch norm after feature embedding.
+            track_running_stats: Which statistics to use for batch norm (if applicable).
+        
+        """
+        super().__init__()
+        #Get the embedding layers from the given model
+        #The attribute containing the model's layers may go by different names
+        try:
+            self.features = nn.Sequential(*list(model.model.children())[:-n])
+        except AttributeError:
+            self.features = nn.Sequential(*list(model.children())[:-n])
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+
+        try:
+            self.dim = model.dim
+        except AttributeError:
+            if dim is None:
+                raise ValueError('Must specify the model embedding dimension.')
+            else:
+                self.dim = dim
+
+        #Whether or not to batch norm the features at the end
+        self.batchnormalize = batchnormalize
+        if batchnormalize:
+            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False,
+                track_running_stats=track_running_stats)
+                
+    def forward(self, x):
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        if self.batchnormalize:
+            x = self.final_normalization(x) #Normalize the output        
+        return x
+
+    def get_dim(self):
+        return self.dim        
+
 class ConvNetEmbedder(nn.Module):
     """Wrapper class for simple CNN embedder.
     
@@ -227,7 +283,8 @@ class Classifier(nn.Module):
         for param in self.embedder.parameters():
             param.requires_grad = False
         #Classification layer
-        self.linear_layer = nn.Linear(embedder.get_dim(), num_classes)
+        # self.linear_layer = nn.Linear(embedder.get_dim(), num_classes)
+        self.linear_layer = nn.Linear(64, num_classes)
 
     def forward(self, x):
         x = self.embedder(x)
@@ -236,7 +293,7 @@ class Classifier(nn.Module):
         return x
 
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
-    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, 
+    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, truncate_model : bool = False,truncation_level : int = -1,
     batchnormalize: bool = False, track_running_stats : bool =True, map_location = None) -> nn.Module:
     """Instantiate or load a specified model.
     
@@ -256,6 +313,11 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     
     """
     checkpointing = False
+
+    if get_embedder and truncate_model:
+        raise ValueError('Cannot get embedder and truncate model')
+    if truncate_model and truncation_level == -1:
+        raise ValueError('Need to specify a truncation level if truncating the model')
     
     if model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
@@ -299,7 +361,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         checkpointing = True
         checkpoint = torch.load(load_path)
         model = ResNet50(num_classes=1000)
-        dim = 2048
+        dim = 2048        
     elif model_str == 'resnet_small_cifar':
         model = cifar_models.ResNet3Layer(num_classes=num_classes)
         dim = 256
@@ -345,6 +407,10 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
                 model.load_state_dict(checkpoint['state_dict'])
         else:                        
             model.load_state_dict(torch.load(load_path,map_location=map_location))
+    
+    if truncate_model:             
+        model = TruncatedNet(model,n=truncation_level,dim=dim,batchnormalize=batchnormalize,track_running_stats=track_running_stats)
+
     if get_embedder:        
         model = Embedder(model, dim=dim, batchnormalize=batchnormalize,
             track_running_stats=track_running_stats)

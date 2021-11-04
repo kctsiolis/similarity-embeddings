@@ -65,9 +65,10 @@ class Logger:
             self.model_path = None   
 
 
-            # Noah's hacky solution
+            # Noah's hacky solution            
             self.dir = make_log_dir(args)
-            os.mkdir(self.dir)
+            if not os.path.exists(self.dir):
+                os.mkdir(self.dir)
             self.log_path = os.path.join(self.dir, 'log.txt')
             self.results_path = os.path.join(self.dir, 'results.txt')
             self.model_path = os.path.join(self.dir, 'model.pt')
