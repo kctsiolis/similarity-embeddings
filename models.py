@@ -106,6 +106,7 @@ class ResNet152(nn.Module):
     def get_dim(self):
         return self.dim
 
+
 class Embedder(nn.Module):
     """Wrapper class for a feature embedder (model w/o classification layer).
 
