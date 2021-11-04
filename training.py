@@ -294,14 +294,20 @@ class DistillationTrainer(Trainer):
 
     def compute_loss(self, data, target):
         if self.distillation_type != 'class-probs':
-            student_sims, teacher_sims = get_student_teacher_similarity(
-                self.model, self.teacher, data, self.cosine,self.margin,self.margin_value)            
-            
+            if self.margin:
+                # Requires targets for intra/inter class margin
+                student_sims, teacher_sims = get_student_teacher_margin_similarity(
+                    self.model, self.teacher, data, target,self.cosine,self.margin_value)            
+            else:
+                # Unsupervised
+                student_sims, teacher_sims = get_student_teacher_similarity(
+                    self.model, self.teacher, data, self.cosine)            
+                
             loss = self.loss_function(student_sims, teacher_sims)        
         else:
             output = self.model(data)
             model_probs = nn.LogSoftmax(dim=1)(output)
-            teacher_probs = nn.Softmax(dim=1)(self.teacher(data))
+            teacher_probs = nn.Softmax(dim=1)(self.teacher(data))            
             loss = self.c * self.loss_function(model_probs, teacher_probs) + \
                 (1-self.c) * self.sup_loss_function(output, target)
 
@@ -527,8 +533,7 @@ def get_labels(loader: torch.utils.data.DataLoader) -> np.ndarray:
     return labels
 
 def get_student_teacher_similarity(student: nn.Module, 
-    teacher: nn.Module, data: torch.Tensor, cosine: bool,margin : bool , margin_value : float
-    ) -> tuple([torch.Tensor, torch.Tensor]):
+    teacher: nn.Module, data: torch.Tensor, cosine: bool) -> tuple([torch.Tensor, torch.Tensor]):
     """Get similarities between instances, as given by student and teacher
 
     Args:
@@ -554,14 +559,78 @@ def get_student_teacher_similarity(student: nn.Module,
 
     student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
 
-    if margin:         
-        # Using the identity cos(x +- m) = cos(x)cos(m) -+ sin(m)sin(x)                
-        cosm = math.cos(margin_value)        
-        sinm = math.sin(margin_value)        
-        sine = torch.sqrt((1.0 - torch.pow(student_sims, 2)) + 1e-6).clamp(0,1) # add 1e-6 for numerical stability                                             
-        student_sims = student_sims * cosm - sinm * sine        
-        student_sims.fill_diagonal_(1) # We'll always be self-similiar         
-        
+    with torch.no_grad():
+        teacher_embs = teacher(data)
+        if cosine:
+            teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
+        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+    
+    return student_sims, teacher_sims
+
+def get_student_teacher_margin_similarity(student: nn.Module, 
+    teacher: nn.Module, data: torch.Tensor,target: torch.Tensor, cosine: bool,margin_value : float) -> tuple([torch.Tensor, torch.Tensor]):
+    """Get similarities between instances WITH MARGIN, as given by student and teacher
+
+    Args:
+        student: The student model.
+        teacher: The teacher model.
+        data: The input.
+        target: Labels        
+        cosine: Set to true to compute cosine similarity, otherwise dot product.
+        margin_value: margin value
+
+    Returns:
+        The similarities between the student and the teacher.
+
+    """
+    if not cosine:
+        raise ValueError('Non-cosine similarity incompatable with margin')
+
+
+    student_embs = student(data)        
+    if cosine:
+        student_embs = F.normalize(student_embs, p=2, dim=1)           
+
+    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
+
+    #### Add margin to similarities
+    # Using the identity cos(x +- m) = cos(x)cos(m) -+ sin(m)sin(x)                
+    sine = torch.sqrt((1.0 - torch.pow(student_sims, 2)) + 1e-6).clamp(0,1) # add 1e-6 for numerical stability                                             
+
+    # only apply margin to samples in different classes
+    n = target.shape[0]
+    device = target.get_device()    
+    margin_mask = target.unsqueeze(1).repeat(1,n) == target.repeat(n,1)    
+    
+    # ### Interclass margin only
+    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
+    # sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
+    # cosm[margin_mask] = 1
+    # sinm[margin_mask] = 0
+
+    #### Intra and Inter class margin
+    cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
+    cosm[margin_mask] = math.cos(0.001) # Inter-class margin should be smaller
+    sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
+    sinm[margin_mask] = -math.sin(0.001) # Inter-class margin should be smaller
+
+    # # Just intraclass margin
+    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
+    # sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
+    # cosm[~margin_mask] = 1
+    # sinm[~margin_mask] = 0
+
+    
+
+    # print('*' * 80)                        
+    # print(margin_mask)    
+    # print(student_sims)
+    student_sims = (torch.mul(student_sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)            
+    
+    # print(student_sims)
+    
+    
+    
 
 
     with torch.no_grad():
@@ -570,7 +639,7 @@ def get_student_teacher_similarity(student: nn.Module,
             teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
         teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
     
-    return student_sims, teacher_sims
+    return student_sims, teacher_sims    
     
 def get_model_similarity(model: nn.Module, data: torch.Tensor, 
     augmented_data: torch.Tensor, cosine: bool) -> torch.Tensor:
