@@ -284,8 +284,8 @@ class Classifier(nn.Module):
         for param in self.embedder.parameters():
             param.requires_grad = False
         #Classification layer
-        # self.linear_layer = nn.Linear(embedder.get_dim(), num_classes)
-        self.linear_layer = nn.Linear(64, num_classes)
+        self.linear_layer = nn.Linear(embedder.get_dim(), num_classes)
+        
 
     def forward(self, x):
         x = self.embedder(x)
