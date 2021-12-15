@@ -89,8 +89,8 @@ class Logger:
         self.log('Mode: {}'.format(args.mode))
         self.log('Dataset: {}'.format(args.dataset))
         if args.mode == 'distillation':
-            self.log('Distillation Type: {}'.format(args.distillation_type))
-            if args.distillation_type == 'class_probs':
+            self.log('Distillation Type: {}'.format(args.distillation_loss))
+            if args.distillation_loss == 'class_probs':
                 self.log('c: {}'.format(args.c))
         self.log('Batch Size: {}'.format(args.batch_size))
         self.log('Learning Rate : {}'.format(args.lr))

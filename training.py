@@ -237,8 +237,9 @@ class DistillationTrainer(Trainer):
         self.cosine = args.cosine
         self.margin = args.margin
         self.margin_value = args.margin_value
-        self.distillation_type = args.distillation_type
-        if self.distillation_type != 'class-probs':
+        self.aug = SimCLRTransform()
+        self.loss_type = args.distillation_loss
+        if self.loss_type != 'class-probs':
             self.loss_function = nn.MSELoss()
         else:
             self.loss_function = nn.KLDivLoss(reduction='batchmean')
@@ -251,13 +252,10 @@ class DistillationTrainer(Trainer):
         self.model.train()      
         self.teacher.eval()
         train_loss = AverageMeter()
-        aug = SimCLRTransform()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
             data = data.to(self.device)
             target = target.to(self.device)
-            if self.distillation_type == 'simclr':
-                data = aug.apply_transform(data)
             self.optimizer.zero_grad()            
             loss = self.compute_loss(data, target)
             train_loss.update(loss.item())
@@ -293,23 +291,37 @@ class DistillationTrainer(Trainer):
         return loss, None, None
 
     def compute_loss(self, data, target):
-        if self.distillation_type != 'class-probs':
-            if self.margin:
-                # Requires targets for intra/inter class margin
-                student_sims, teacher_sims = get_student_teacher_margin_similarity(
-                    self.model, self.teacher, data, target,self.cosine,self.margin_value)            
-            else:
-                # Unsupervised
-                student_sims, teacher_sims = get_student_teacher_similarity(
-                    self.model, self.teacher, data, self.cosine)            
-                
-            loss = self.loss_function(student_sims, teacher_sims)        
-        else:
+        if self.loss_type == 'class_probs':
+            if self.augmented:
+                data = self.aug.apply_transform(data)
             output = self.model(data)
             model_probs = nn.LogSoftmax(dim=1)(output)
             teacher_probs = nn.Softmax(dim=1)(self.teacher(data))            
             loss = self.c * self.loss_function(model_probs, teacher_probs) + \
                 (1-self.c) * self.sup_loss_function(output, target)
+        elif self.margin:
+            #Margin automatically computes full similarity
+            # Requires targets for intra/inter class margin
+            student_sims, teacher_sims = get_student_teacher_margin_similarity(
+                self.model, self.teacher, data, target, self.cosine, self.margin_value) 
+            loss = self.loss_function(student_sims, teacher_sims)  
+        elif self.loss_type == 'full_similarity':
+            if self.augment:
+                data = self.aug.apply_transform(data)
+            student_sims, teacher_sims = get_student_teacher_similarity(
+                self.model, self.teacher, data, self.cosine)
+
+            loss = self.loss_function(student_sims, teacher_sims)  
+        else:
+            #Sample-based similarity
+            #Computes similarity between original and augmented image
+            augmented_data = self.aug.apply_transform(data)
+            student_sims = get_model_similarity(
+                self.model, data, augmented_data, self.cosine)
+            teacher_sims = get_model_similarity(
+                self.teacher, data, augmented_data, self.cosine)
+
+            loss = self.loss_function(student_sims, teacher_sims)   
 
         return loss
 
@@ -549,11 +561,7 @@ def get_student_teacher_similarity(student: nn.Module,
     if not cosine:
         margin = False
 
-
-    student_embs = student(data)    
-    # print('*' * 80)
-    # print('Embs')
-    # print(torch.sum(torch.isnan(student_embs)))    
+    student_embs = student(data)     
     if cosine:
         student_embs = F.normalize(student_embs, p=2, dim=1)           
 

@@ -78,9 +78,11 @@ def get_args(parser):
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--distillation-type', type=str, choices=['similarity-based', 'class-probs', 'simclr'],
-                        default='similarity-based',
-                        help='Use cosine similarity in the distillation loss.')
+    parser.add_argument('--distillation-loss', type=str, choices=['full-similarity', 'sample-similarity', 'class-probs'],
+                        default='full-similarity',
+                        help='Loss used for distillation.')
+    parser.add_argument('--augmented-distillation', action='store_true',
+                        help='Whether or not to use data augmentation in distillation.')
     parser.add_argument('-c', type=float, default=0.5,
                         help='Weighing of soft target and hard target loss in class-probs distillation.')
     parser.add_argument('--augmentation', type=str, choices=['blur', 'jitter', 'crop'], default=None,
@@ -145,7 +147,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
             args.student_model, load=True, load_path=args.student_path,
             one_channel=one_channel, num_classes=num_classes,truncate_model = args.truncate_model,truncation_level = args.truncation_level)
     elif args.mode == 'distillation':
-        get_embedder = args.distillation_type != 'class-probs'
+        get_embedder = args.distillation_loss != 'class-probs'
         model = get_model(args.student_model, load=load_student,
             load_path=args.student_path, one_channel=one_channel, 
             get_embedder=get_embedder, num_classes=num_classes)
@@ -165,7 +167,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     model.to(device)
 
     if args.mode == 'distillation':
-        get_embedder = args.distillation_type != 'class-probs'              
+        get_embedder = args.distillation_loss != 'class-probs'              
                
     else:
         teacher = None
