@@ -78,7 +78,7 @@ def get_args(parser):
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--distillation-type', type=str, choices=['similarity-based', 'class-probs', 'simclr'],
+    parser.add_argument('--distillation-type', type=str, choices=['distance-based','similarity-based', 'class-probs', 'simclr'],
                         default='similarity-based',
                         help='Use cosine similarity in the distillation loss.')
     parser.add_argument('-c', type=float, default=0.5,
@@ -99,12 +99,15 @@ def get_args(parser):
                         help='Dimension to of projection to wrap the teacher model in')                        
     parser.add_argument('--margin', action = 'store_true',
                         help='(For cosine distillation only) Should angular margin be applied ')
+    parser.add_argument('--margin-value', type = float,default = 0.5,
+                        help='If [margin] is selected what should it be set to (Default 0.5)')     
     parser.add_argument('--truncate-model', action = 'store_true',
                         help='Should we truncate the (student) model when training a linear classifier?')                        
     parser.add_argument('--truncation-level', type =int,
-                        help='How many layers to remove to form the truncated (student) model')                                                
-    parser.add_argument('--margin-value', type = float,default = 0.5,
-                        help='If [margin] is selected what should it be set to (Default 0.5)')                                                    
+                        help='How many layers to remove to form the truncated (student) model')                                  
+
+
+                                                   
 
     args = parser.parse_args()
 
@@ -113,6 +116,7 @@ def get_args(parser):
 def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
     device = torch.device(args.device[idx])
 
+    
     if distributed:
         dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
             world_size=num_gpus, rank=idx)

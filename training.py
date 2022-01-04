@@ -14,6 +14,7 @@ import os
 import torch
 import numpy as np
 from torch import nn
+from torch._C import Value
 import torch.nn.functional as F
 import numpy as np
 import math                                       
@@ -293,15 +294,18 @@ class DistillationTrainer(Trainer):
         return loss, None, None
 
     def compute_loss(self, data, target):
-        if self.distillation_type != 'class-probs':
+        if self.distillation_type != 'class-probs':            
             if self.margin:
+                if self.distillation_type == 'distance-based':
+                    raise NotImplementedError('Margin for distance similarity not implemented')
                 # Requires targets for intra/inter class margin
                 student_sims, teacher_sims = get_student_teacher_margin_similarity(
                     self.model, self.teacher, data, target,self.cosine,self.margin_value)            
             else:
                 # Unsupervised
+                distance_sim = self.distillation_type == 'distance-based'
                 student_sims, teacher_sims = get_student_teacher_similarity(
-                    self.model, self.teacher, data, self.cosine)            
+                    self.model, self.teacher, data, self.cosine,distance_sim)            
                 
             loss = self.loss_function(student_sims, teacher_sims)        
         else:
@@ -533,7 +537,7 @@ def get_labels(loader: torch.utils.data.DataLoader) -> np.ndarray:
     return labels
 
 def get_student_teacher_similarity(student: nn.Module, 
-    teacher: nn.Module, data: torch.Tensor, cosine: bool) -> tuple([torch.Tensor, torch.Tensor]):
+    teacher: nn.Module, data: torch.Tensor, cosine: bool,distance_based:bool) -> tuple([torch.Tensor, torch.Tensor]):
     """Get similarities between instances, as given by student and teacher
 
     Args:
@@ -546,8 +550,8 @@ def get_student_teacher_similarity(student: nn.Module,
         The similarities output by the student and the teacher.
 
     """
-    if not cosine:
-        margin = False
+    if cosine and distance_based:
+        raise ValueError('Cannot use both cosine and distance based similarity')
 
 
     student_embs = student(data)    
@@ -556,15 +560,21 @@ def get_student_teacher_similarity(student: nn.Module,
     # print(torch.sum(torch.isnan(student_embs)))    
     if cosine:
         student_embs = F.normalize(student_embs, p=2, dim=1)           
-
-    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
-
     with torch.no_grad():
         teacher_embs = teacher(data)
         if cosine:
             teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
-    
+
+    if distance_based:
+        # Calculate pairwise square distances normalized by feature dimension 
+        student_sims = ((student_embs[:,None,:] - student_embs[None,:,:])**2).sum(axis=-1)/student_embs.shape[1] 
+        with torch.no_grad():                        
+            teacher_sims = ((teacher_embs[:,None,:] - teacher_embs[None,:,:])**2).sum(axis=-1)/teacher_embs.shape[1] 
+    else:
+        student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
+        with torch.no_grad():                        
+            teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+        
     return student_sims, teacher_sims
 
 def get_student_teacher_margin_similarity(student: nn.Module, 

@@ -212,7 +212,24 @@ class TruncatedNet(nn.Module):
         return x
 
     def get_dim(self):
-        return self.dim        
+        return self.dim   
+
+class MLP(nn.Module):
+    ''' A basic 3 layer MLP '''
+
+    def __init__(self, input_dim: int, num_classes: int, hidden_dim: int = 32) -> None:
+        super(MLP, self).__init__()
+        self.input_dim = input_dim
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x):
+        x = x.view(-1, self.input_dim)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x             
 
 class ConvNetEmbedder(nn.Module):
     """Wrapper class for simple CNN embedder.
@@ -320,7 +337,10 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     if truncate_model and truncation_level == -1:
         raise ValueError('Need to specify a truncation level if truncating the model')
     
-    if model_str == 'resnet18':
+    if model_str == 'mlp':
+        model = MLP(input_dim=32*32*3, num_classes=num_classes,hidden_dim=256)
+        dim = 256    
+    elif model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
         dim = 512    
     elif model_str == 'resnet50':
