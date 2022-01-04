@@ -389,6 +389,9 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet_small_cifar_embedder':
         model = Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256, batchnormalize=batchnormalize,
             track_running_stats=track_running_stats)   
+    elif model_str == 'resnet_small_cifar_classifier':
+        model = Classifier(Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256, batchnormalize=batchnormalize,
+            track_running_stats=track_running_stats),num_classes=num_classes)   
     elif model_str == 'simple':
         model = cifar_models.SuperSimpleNet()             
         dim = 84
