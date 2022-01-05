@@ -137,7 +137,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     elif args.dataset == 'cifar100':
         num_classes = 100
     else:
-        # Cifar10  or MNIST
+        # Cifar10 or MNIST
         num_classes = 10
 
     load_student = (args.student_path is not None)

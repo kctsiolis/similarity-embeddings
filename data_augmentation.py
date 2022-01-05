@@ -191,6 +191,6 @@ class SimCLRTransform():
     def get_transform(self):
         return self.transform
 
-    def apply_transform(self, data):
-        return self.transform(data)
+    def __call__(self, data, num_views):
+        return [self.transform(data) for _ in range(num_views)]
     

@@ -239,7 +239,7 @@ class DistillationTrainer(Trainer):
         self.margin = args.margin
         self.margin_value = args.margin_value
         self.augment = args.augmented_distillation
-        self.transform = SimCLRTransform().get_transform()
+        self.transform = SimCLRTransform()
         self.loss_type = args.distillation_loss
         if self.loss_type != 'class-probs':
             self.loss_function = nn.MSELoss()
@@ -312,7 +312,8 @@ class DistillationTrainer(Trainer):
             loss = self.loss_function(student_sims, teacher_sims)  
         elif self.loss_type == 'full-similarity':
             if self.augment:
-                data = self.transform(data)
+                data = self.transform(data, num_views=2)
+                data = torch.cat(data, dim=0)
             
             student_sims, teacher_sims = get_student_teacher_similarity(
                 self.model, self.teacher, data, self.cosine)
