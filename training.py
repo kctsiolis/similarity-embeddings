@@ -24,6 +24,7 @@ from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 from data_augmentation import make_augmentation, Augmentation, SimCLRTransform
 from logger import Logger
+import time
 
 class Trainer():
 
@@ -123,7 +124,7 @@ class Trainer():
                 epochs_until_stop = self.early_stop
 
                 #Save the current model (as it is the best one so far)
-                if self.rank == 0:
+                if self.rank == 0 and self.logger.save:
                     if self.model_path is not None:
                         if self.save_each_epoch:
                             name, ext = os.path.splitext(self.model_path)                        
@@ -215,7 +216,7 @@ class SupervisedTrainer(Trainer):
                     epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
                     100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
-            if batch_idx % self.plot_interval == 0:
+            if batch_idx % self.plot_interval == 0 and self.logger.save:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
             self.itr += 1
@@ -237,7 +238,8 @@ class DistillationTrainer(Trainer):
         self.cosine = args.cosine
         self.margin = args.margin
         self.margin_value = args.margin_value
-        self.aug = SimCLRTransform()
+        self.augment = args.augmented_distillation
+        self.transform = SimCLRTransform().get_transform()
         self.loss_type = args.distillation_loss
         if self.loss_type != 'class-probs':
             self.loss_function = nn.MSELoss()
@@ -252,6 +254,7 @@ class DistillationTrainer(Trainer):
         self.model.train()      
         self.teacher.eval()
         train_loss = AverageMeter()
+        epoch_start = time.time()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
             data = data.to(self.device)
@@ -269,10 +272,12 @@ class DistillationTrainer(Trainer):
                     epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
                     100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
-            if batch_idx % self.plot_interval == 0:
+            if batch_idx % self.plot_interval == 0 and self.logger.save:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
             self.itr += 1
+        epoch_end = time.time()
+        self.logger.log('Epoch Duration: {:.2f} s'.format(epoch_end-epoch_start))
         
         return train_loss.get_avg(), None, None
 
@@ -291,9 +296,9 @@ class DistillationTrainer(Trainer):
         return loss, None, None
 
     def compute_loss(self, data, target):
-        if self.loss_type == 'class_probs':
+        if self.loss_type == 'class-probs':
             if self.augmented:
-                data = self.aug.apply_transform(data)
+                data = self.transform(data)
             output = self.model(data)
             model_probs = nn.LogSoftmax(dim=1)(output)
             teacher_probs = nn.Softmax(dim=1)(self.teacher(data))            
@@ -305,9 +310,10 @@ class DistillationTrainer(Trainer):
             student_sims, teacher_sims = get_student_teacher_margin_similarity(
                 self.model, self.teacher, data, target, self.cosine, self.margin_value) 
             loss = self.loss_function(student_sims, teacher_sims)  
-        elif self.loss_type == 'full_similarity':
+        elif self.loss_type == 'full-similarity':
             if self.augment:
-                data = self.aug.apply_transform(data)
+                data = self.transform(data)
+            
             student_sims, teacher_sims = get_student_teacher_similarity(
                 self.model, self.teacher, data, self.cosine)
 
@@ -315,11 +321,12 @@ class DistillationTrainer(Trainer):
         else:
             #Sample-based similarity
             #Computes similarity between original and augmented image
-            augmented_data = self.aug.apply_transform(data)
+            augmented_data = self.transform(data)
             student_sims = get_model_similarity(
                 self.model, data, augmented_data, self.cosine)
-            teacher_sims = get_model_similarity(
-                self.teacher, data, augmented_data, self.cosine)
+            with torch.no_grad():
+                teacher_sims = get_model_similarity(
+                    self.teacher, data, augmented_data, self.cosine)
 
             loss = self.loss_function(student_sims, teacher_sims)   
 
@@ -378,7 +385,7 @@ class SimilarityTrainer(Trainer):
                     epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
                     100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
-            if batch_idx % self.plot_interval == 0:
+            if batch_idx % self.plot_interval == 0 and self.logger.save:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
             self.itr += 1
@@ -672,7 +679,7 @@ def get_model_similarity(model: nn.Module, data: torch.Tensor,
         data_embs = F.normalize(data_embs, p=2, dim=1)
         augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
 
-    return torch.sum(torch.mul(data_embs, augmented_data_embs), dim=1)
+    return torch.sum(data_embs * augmented_data_embs, dim=1)
 
 def get_model_probability(sims: torch.Tensor, temp: float = 1.0
     ) -> torch.Tensor:

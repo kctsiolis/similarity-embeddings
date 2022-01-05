@@ -48,7 +48,8 @@ class Logger:
         """
         
         self.verbose = verbose
-        if save:
+        self.save = save
+        if self.save:
             self.dir = make_log_dir(args)
             os.mkdir(self.dir)
             self.log_path = os.path.join(self.dir, 'log.txt')

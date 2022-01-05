@@ -262,7 +262,7 @@ def cifar_loader(batch_size: int,
         sampler = None
 
     train_loader = DataLoader(
-        train_transformed, batch_size=batch_size, sampler=sampler, num_workers=1,
+        train_transformed, batch_size=batch_size, sampler=sampler, num_workers=0,
         pin_memory=True, shuffle=(not distributed))
 
     return train_loader, test_loader

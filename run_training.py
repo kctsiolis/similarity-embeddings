@@ -106,7 +106,9 @@ def get_args(parser):
     parser.add_argument('--truncation-level', type =int,
                         help='How many layers to remove to form the truncated (student) model')                                                
     parser.add_argument('--margin-value', type = float,default = 0.5,
-                        help='If [margin] is selected what should it be set to (Default 0.5)')                                                    
+                        help='If [margin] is selected what should it be set to (Default 0.5)')    
+    parser.add_argument('--no-save', action='store_true',
+                        help='Don\'t save the log, plots, and model from this run.')                                                
 
     args = parser.parse_args()
 
@@ -126,7 +128,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         args.dataset, batch_size, args.train_set_fraction, 
         args.validate, distributed)
 
-    logger = Logger(args, save=(idx == 0))
+    logger = Logger(args, save=(not (args.no_save) and idx == 0))
     one_channel = args.dataset == 'mnist'
     if args.dataset == 'imagenet':
         num_classes = 1000
@@ -191,8 +193,8 @@ def main():
     np.random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = True
+    #torch.backends.cudnn.deterministic = True
+    #torch.backends.cudnn.benchmark = True
 
     num_gpus = len(args.device)
     #If we are doing distributed computation over multiple GPUs
