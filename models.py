@@ -115,8 +115,7 @@ class Embedder(nn.Module):
         dim: Embedding dimension.
 
     """
-    def __init__(self, model, dim=None, batchnormalize=False,
-        track_running_stats=True):
+    def __init__(self, model, dim=None, project=True):
         """Instantiate object of class Embedder.
 
         Args:
@@ -133,7 +132,7 @@ class Embedder(nn.Module):
             self.features = nn.Sequential(*list(model.model.children())[:-1])
         except AttributeError:
             self.features = nn.Sequential(*list(model.children())[:-1])
-
+        
         try:
             self.dim = model.dim
         except AttributeError:
@@ -142,21 +141,39 @@ class Embedder(nn.Module):
             else:
                 self.dim = dim
 
+        """
         #Whether or not to batch norm the features at the end
         self.batchnormalize = batchnormalize
         if batchnormalize:
             self.final_normalization = nn.BatchNorm1d(self.dim, affine=False,
                 track_running_stats=track_running_stats)
+        """
+
+        self.project = project
+        if project:
+            self.projection = nn.Sequential(
+                nn.Linear(self.dim, 512),
+                nn.ReLU(),
+                nn.Linear(512, 128)
+            )
                 
     def forward(self, x):
         x = self.features(x)
         x = torch.flatten(x, 1)
-        if self.batchnormalize:
-            x = self.final_normalization(x) #Normalize the output
+        if self.project:
+            x = self.projection(x)
         return x
 
     def get_dim(self):
         return self.dim
+
+    def student_mode(self):
+        self.features.requires_grad = True
+        self.projection.requires_grad = True
+
+    def teacher_mode(self):
+        self.features.requires_grad = False
+        self.projection.requires_grad = True
 
 
 class TruncatedNet(nn.Module):
