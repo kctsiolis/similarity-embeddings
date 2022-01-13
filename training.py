@@ -226,6 +226,7 @@ class SupervisedTrainer(Trainer):
         return predict(
             self.model, self.device, self.val_loader, self.loss_function)
 
+
 class DistillationTrainer(Trainer):
     def __init__(
             self, model: nn.Module, teacher: nn.Module, train_loader: DataLoader, 
@@ -312,6 +313,100 @@ class DistillationTrainer(Trainer):
                 (1-self.c) * self.sup_loss_function(output, target)
 
         return loss
+
+
+class WeightedDistillationTrainer(Trainer):
+    def __init__(
+            self, model: nn.Module, teacher: nn.Module, train_loader: DataLoader, 
+            val_loader: DataLoader, device: torch.device, logger: Logger,
+            rank: int, args: Namespace):
+        super().__init__(
+            model, train_loader, val_loader, device, logger, rank, args)
+        self.teacher = teacher
+        self.cosine = args.cosine
+        self.margin = args.margin
+        self.margin_value = args.margin_value
+        self.distillation_type = args.distillation_type
+        if self.distillation_type != 'class-probs':
+            self.loss_function = nn.MSELoss()
+        else:
+            self.loss_function = nn.KLDivLoss(reduction='batchmean')
+            self.sup_loss_function = nn.CrossEntropyLoss()
+            if args.c < 0 or args.c > 1:
+                raise ValueError('c must be in [0,1].')
+            self.c = args.c
+
+    def train_epoch(self, epoch):
+        self.model.train()      
+        self.teacher.eval()
+        train_loss = AverageMeter()
+        aug = SimCLRTransform()
+        for batch_idx, (data, target) in enumerate(self.train_loader):
+            self.update_lr()
+            data = data.to(self.device)
+            target = target.to(self.device)
+            if self.distillation_type == 'simclr':
+                data = aug.apply_transform(data)
+            self.optimizer.zero_grad()            
+            loss = self.compute_loss(data, target)
+            train_loss.update(loss.item())
+            loss.backward()
+            self.optimizer.step()
+            if batch_idx % self.log_interval == 0:
+                logged_loss = train_loss.get_avg()
+                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
+                self.logged_train_losses.append(logged_loss)
+                log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
+                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
+                    100. * batch_idx / len(self.train_loader), logged_loss)
+                self.logger.log(log_str)
+            if batch_idx % self.plot_interval == 0:
+                train_loss_plot(
+                    self.iters, self.logged_train_losses, self.plots_dir)
+            self.itr += 1
+        
+        return train_loss.get_avg(), None, None
+
+    def validate(self):
+        self.model.eval()
+        self.teacher.eval()
+        loss = 0
+        with torch.no_grad():
+            for data, target in self.val_loader:
+                data = data.to(self.device)
+                target = target.to(self.device)
+                loss += self.compute_loss(data, target).item()
+
+        loss = loss / len(self.val_loader)
+
+        return loss, None, None
+
+    def compute_loss(self, data, target):
+        if self.distillation_type != 'class-probs':
+            if self.margin:
+                # Requires targets for intra/inter class margin
+                student_sims, teacher_sims = get_student_teacher_margin_similarity(
+                    self.model, self.teacher, data, target,self.cosine,self.margin_value)            
+            else:
+                # Unsupervised
+                student_sims, teacher_sims = get_student_teacher_similarity(
+                    self.model, self.teacher, data, self.cosine)            
+                
+            loss = self.loss_function(student_sims, teacher_sims)        
+        else:
+            output = self.model(data)
+            model_probs = nn.LogSoftmax(dim=1)(output)
+            teacher_probs = nn.Softmax(dim=1)(self.teacher(data))            
+            loss = self.c * self.loss_function(model_probs, teacher_probs) + \
+                (1-self.c) * self.sup_loss_function(output, target)
+
+        return loss
+
+
+
+
+
+
 
 class SimilarityTrainer(Trainer):
     def __init__(

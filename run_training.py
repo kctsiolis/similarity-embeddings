@@ -25,20 +25,21 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 import numpy as np
-from models import get_model, Classifier,WrapWithProjection
+from models import get_model, Classifier, WrapWithProjection, EmbedderAndLogits
 from loaders import dataset_loader
 from training import get_trainer
 from logger import Logger
 
+
 def get_args(parser):
     """Collect command line arguments."""
-    parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'similarity',
-        'linear_classifier', 'random'] ,metavar='D',
-        help='Training mode.')
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'cifar100', 'imagenet', 'tiny_imagenet'] ,metavar='D',
-        help='Dataset to train and validate on (MNIST or CIFAR).')
+    parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'weighted-distillation', 'similarity',
+                                                     'linear_classifier', 'random'], metavar='D',
+                        help='Training mode.')
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'cifar100', 'imagenet', 'tiny_imagenet'], metavar='D',
+                        help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-        help='Batch size (default: 64)')
+                        help='Batch size (default: 64)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 50)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
@@ -61,8 +62,8 @@ def get_args(parser):
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='Frequency of loss logging in terms of number of iterations (default: 10).')
-    parser.add_argument('--save-each-epoch', action = 'store_true',
-                        help='Save model at each epoch rather than override model each time')                        
+    parser.add_argument('--save-each-epoch', action='store_true',
+                        help='Save model at each epoch rather than override model each time')
     parser.add_argument('--plot-interval', type=int,
                         help='Number of iterations between updates of loss plot.')
     parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
@@ -74,7 +75,7 @@ def get_args(parser):
                         help='Path to the student model.')
     parser.add_argument('--teacher-model', type=str, default=None,
                         help='Choice of teacher model (for distillation only).')
-    parser.add_argument('--student-model', type=str, 
+    parser.add_argument('--student-model', type=str,
                         help='Choice of student model.')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
@@ -93,35 +94,36 @@ def get_args(parser):
                         help='Parameter of similarity probability function p(alpha).')
     parser.add_argument('--temp', type=float, default=0.01,
                         help='Temperature in sigmoid function converting similarity score to probability.')
-    parser.add_argument('--wrap-in-projection', action = 'store_true',
-                        help='Wrap the teacher model in a random projection (For distillation only)')                        
-    parser.add_argument('--projection-dim', type = int,default = None,
-                        help='Dimension to of projection to wrap the teacher model in')                        
-    parser.add_argument('--margin', action = 'store_true',
+    parser.add_argument('--wrap-in-projection', action='store_true',
+                        help='Wrap the teacher model in a random projection (For distillation only)')
+    parser.add_argument('--projection-dim', type=int, default=None,
+                        help='Dimension to of projection to wrap the teacher model in')
+    parser.add_argument('--margin', action='store_true',
                         help='(For cosine distillation only) Should angular margin be applied ')
-    parser.add_argument('--truncate-model', action = 'store_true',
-                        help='Should we truncate the (student) model when training a linear classifier?')                        
-    parser.add_argument('--truncation-level', type =int,
-                        help='How many layers to remove to form the truncated (student) model')                                                
-    parser.add_argument('--margin-value', type = float,default = 0.5,
-                        help='If [margin] is selected what should it be set to (Default 0.5)')                                                    
+    parser.add_argument('--truncate-model', action='store_true',
+                        help='Should we truncate the (student) model when training a linear classifier?')
+    parser.add_argument('--truncation-level', type=int,
+                        help='How many layers to remove to form the truncated (student) model')
+    parser.add_argument('--margin-value', type=float, default=0.5,
+                        help='If [margin] is selected what should it be set to (Default 0.5)')
 
     args = parser.parse_args()
 
     return args
+
 
 def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
     device = torch.device(args.device[idx])
 
     if distributed:
         dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
-            world_size=num_gpus, rank=idx)
-        
+                                world_size=num_gpus, rank=idx)
+
     batch_size = int(args.batch_size / num_gpus)
 
-    #Get the data
+    # Get the data
     train_loader, val_loader = dataset_loader(
-        args.dataset, batch_size, args.train_set_fraction, 
+        args.dataset, batch_size, args.train_set_fraction,
         args.validate, distributed)
 
     logger = Logger(args, save=(idx == 0))
@@ -137,54 +139,69 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         num_classes = 10
 
     load_student = (args.student_path is not None)
-    
+
     if args.mode == 'teacher' or args.mode == 'random':
-        model = get_model(args.student_model, one_channel=one_channel, num_classes=num_classes)
+        model = get_model(args.student_model,
+                          one_channel=one_channel, num_classes=num_classes)
     elif args.mode == 'linear_classifier':
         model = get_model(
             args.student_model, load=True, load_path=args.student_path,
-            one_channel=one_channel, num_classes=num_classes,truncate_model = args.truncate_model,truncation_level = args.truncation_level)
+            one_channel=one_channel, num_classes=num_classes, truncate_model=args.truncate_model, truncation_level=args.truncation_level)
     elif args.mode == 'distillation':
         get_embedder = args.distillation_type != 'class-probs'
         model = get_model(args.student_model, load=load_student,
-            load_path=args.student_path, one_channel=one_channel, 
-            get_embedder=get_embedder, num_classes=num_classes)
+                          load_path=args.student_path, one_channel=one_channel,
+                          get_embedder=get_embedder, num_classes=num_classes)
         teacher = get_model(
-            args.teacher_model, load=True, load_path=args.teacher_path, 
-            one_channel=one_channel, num_classes=num_classes, 
-            get_embedder=get_embedder).to(device) 
+            args.teacher_model, load=True, load_path=args.teacher_path,
+            one_channel=one_channel, num_classes=num_classes,
+            get_embedder=get_embedder).to(device)
         if args.wrap_in_projection:
-            teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim).to(device) 
+            teacher = WrapWithProjection(
+                teacher, teacher.dim, args.projection_dim).to(device)
+    elif args.mode == 'weighted-distillation':
+        get_embedder = args.distillation_type != 'class-probs'
+        model = get_model(args.student_model, load=load_student,
+                          load_path=args.student_path, one_channel=one_channel,
+                          get_embedder=get_embedder, num_classes=num_classes)
+        teacher = get_model(
+            args.teacher_model, load=True, load_path=args.teacher_path,
+            one_channel=one_channel, num_classes=num_classes,
+            get_embedder=False)
+        teacher = EmbedderAndLogits(teacher).to(device)        
     else:
         model = get_model(args.student_model, load=load_student,
-            load_path=args.student_path, one_channel=one_channel, get_embedder=True)
-    
+                          load_path=args.student_path, one_channel=one_channel, get_embedder=True)
+
     if args.mode == 'linear_classifier' or args.mode == 'random':
         model = Classifier(model, num_classes=num_classes)
 
-    model.to(device)
+    # model.to(device)
 
-    if args.mode == 'distillation':
-        get_embedder = args.distillation_type != 'class-probs'              
-               
-    else:
-        teacher = None
+    # if args.mode == 'distillation':
+    #     get_embedder = args.distillation_type != 'class-probs'
 
-    if distributed:
-        model = DistributedDataParallel(model, device_ids=[device])
-        if args.mode == 'distillation':
-            teacher = DistributedDataParallel(teacher, device_ids=[device])
+    # else:
+    #     teacher = None
 
-    trainer = get_trainer(args.mode, model, teacher, train_loader, val_loader, device, logger, idx, args)
+    # if distributed:
+    #     model = DistributedDataParallel(model, device_ids=[device])
+    #     if args.mode == 'distillation':
+    #         teacher = DistributedDataParallel(teacher, device_ids=[device])
 
-    trainer.train()
+    # trainer = get_trainer(args.mode, model, teacher,
+    #                       train_loader, val_loader, device, logger, idx, args)
+
+    # trainer.train()
+    print(teacher)
+
 
 def main():
     """Load arguments, the dataset, and initiate the training loop."""
     parser = argparse.ArgumentParser(description='Training the teacher model')
     args = get_args(parser)
 
-    #Set random seed
+    # Set random seed
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     if torch.cuda.is_available():
@@ -193,11 +210,12 @@ def main():
     torch.backends.cudnn.benchmark = True
 
     num_gpus = len(args.device)
-    #If we are doing distributed computation over multiple GPUs
+    # If we are doing distributed computation over multiple GPUs
     if num_gpus > 1:
         mp.spawn(main_worker, nprocs=num_gpus, args=(num_gpus, True, args))
     else:
         main_worker(0, 1, False, args)
+
 
 if __name__ == '__main__':
     main()

@@ -158,6 +158,59 @@ class Embedder(nn.Module):
     def get_dim(self):
         return self.dim
 
+class EmbedderAndLogits(nn.Module):
+    """
+    Wrapper for model to return both embeddings and logits
+    """
+    def __init__(self, model, dim=None, batchnormalize=False,
+        track_running_stats=True):
+        """Instantiate object .
+
+        Args:
+            model: A model with a classification layer (which will be removed).
+            dim: The embedding dimension of the model.
+            batchnormalize: Whether or not to add batch norm after feature embedding.
+            track_running_stats: Which statistics to use for batch norm (if applicable).
+
+        """
+        super().__init__()
+        #Get the embedding layers from the given model
+        #The attribute containing the model's layers may go by different names
+        try:
+            self.features = nn.Sequential(*list(model.model.children())[:-1])
+            self.lc = list(model.model.children())[-1]
+        except AttributeError:
+            self.features = nn.Sequential(*list(model.children())[:-1])
+            self.lc = list(model.children())[-1]
+            
+
+        try:
+            self.dim = model.dim
+        except AttributeError:
+            if dim is None:
+                raise ValueError('Must specify the model embedding dimension.')
+            else:
+                self.dim = dim
+
+        #Whether or not to batch norm the features at the end
+        self.batchnormalize = batchnormalize
+        if batchnormalize:
+            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False,
+                track_running_stats=track_running_stats)
+                
+    def forward(self, x):
+        x = self.features(x)
+        features = torch.flatten(x, 1)
+        if self.batchnormalize:
+            features = self.final_normalization(features) #Normalize the output
+
+        logits = self.lc(features)
+
+        return features, logits
+
+    def get_dim(self):
+        return self.dim        
+
 
 class TruncatedNet(nn.Module):
     """A wrapper class to truncate another model. (A slight reskin of the Embedder class)            
