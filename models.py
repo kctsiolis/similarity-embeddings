@@ -369,6 +369,9 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         load = False
         model = ResNet18(one_channel=one_channel, pretrained=True)
         dim = 512
+    elif model_str == 'resnet18_pretrained_embedder':
+        load = False
+        model = Embedder(ResNet18(one_channel=one_channel, pretrained=True),dim=512)        
     elif model_str == 'resnet50_pretrained':
         load = False
         model = ResNet50(one_channel=one_channel, pretrained=True)
@@ -386,11 +389,20 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet_small_cifar':
         model = cifar_models.ResNet3Layer(num_classes=num_classes)
         dim = 256
+    elif model_str == 'resnet_very_small_cifar':
+        model = cifar_models.ResNet2Layer(num_classes=num_classes)
+        dim = 128
     elif model_str == 'resnet_small_cifar_embedder':
         model = Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256, batchnormalize=batchnormalize,
             track_running_stats=track_running_stats)   
+    elif model_str == 'resnet_very_small_cifar_embedder':
+        model = Embedder(cifar_models.ResNet2Layer(num_classes=num_classes), dim=128, batchnormalize=batchnormalize,
+            track_running_stats=track_running_stats)   
     elif model_str == 'resnet_small_cifar_classifier':
         model = Classifier(Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256, batchnormalize=batchnormalize,
+            track_running_stats=track_running_stats),num_classes=num_classes)   
+    elif model_str == 'resnet_very_small_cifar_classifier':
+        model = Classifier(Embedder(cifar_models.ResNet2Layer(num_classes=num_classes), dim=128, batchnormalize=batchnormalize,
             track_running_stats=track_running_stats),num_classes=num_classes)   
     elif model_str == 'simple':
         model = cifar_models.SuperSimpleNet()             
