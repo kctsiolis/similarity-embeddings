@@ -327,14 +327,7 @@ class WeightedDistillationTrainer(Trainer):
         self.margin = args.margin
         self.margin_value = args.margin_value
         self.distillation_type = args.distillation_type
-        if self.distillation_type != 'class-probs':
-            self.loss_function = nn.MSELoss()
-        else:
-            self.loss_function = nn.KLDivLoss(reduction='batchmean')
-            self.sup_loss_function = nn.CrossEntropyLoss()
-            if args.c < 0 or args.c > 1:
-                raise ValueError('c must be in [0,1].')
-            self.c = args.c
+        self.loss_function = nn.MSELoss()
 
     def train_epoch(self, epoch):
         self.model.train()      
@@ -381,24 +374,10 @@ class WeightedDistillationTrainer(Trainer):
 
         return loss, None, None
 
-    def compute_loss(self, data, target):
-        if self.distillation_type != 'class-probs':
-            if self.margin:
-                # Requires targets for intra/inter class margin
-                student_sims, teacher_sims = get_student_teacher_margin_similarity(
-                    self.model, self.teacher, data, target,self.cosine,self.margin_value)            
-            else:
-                # Unsupervised
-                student_sims, teacher_sims = get_student_teacher_similarity(
-                    self.model, self.teacher, data, self.cosine)            
-                
-            loss = self.loss_function(student_sims, teacher_sims)        
-        else:
-            output = self.model(data)
-            model_probs = nn.LogSoftmax(dim=1)(output)
-            teacher_probs = nn.Softmax(dim=1)(self.teacher(data))            
-            loss = self.c * self.loss_function(model_probs, teacher_probs) + \
-                (1-self.c) * self.sup_loss_function(output, target)
+    def compute_loss(self, data, target):        
+        # Unsupervised learning - (well supervised by the teacher)
+        student_sims, teacher_sims, teacher_confidence = get_weighted_student_teacher_similarity(self.model, self.teacher, data, self.cosine)                        
+        loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0] 
 
         return loss
 
@@ -481,6 +460,9 @@ def get_trainer(mode: str, model: nn.Module, teacher: nn.Module,
             model, train_loader, val_loader, device, logger, rank, args)
     elif mode == 'distillation':
         return DistillationTrainer(
+            model, teacher, train_loader, val_loader, device, logger, rank, args)
+    elif mode == 'weighted-distillation':
+        return WeightedDistillationTrainer(
             model, teacher, train_loader, val_loader, device, logger, rank, args)
     else:
         return SimilarityTrainer(
@@ -661,6 +643,41 @@ def get_student_teacher_similarity(student: nn.Module,
         teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
     
     return student_sims, teacher_sims
+
+
+def get_weighted_student_teacher_similarity(student: nn.Module, 
+    teacher: nn.Module, data: torch.Tensor, cosine: bool) -> tuple([torch.Tensor, torch.Tensor]):
+    """Get similarities between instances, as given by student and teacher
+
+    Args:
+        student: The student model.
+        teacher: The teacher model.
+        data: The input.
+        cosine: Set to true to compute cosine similarity, otherwise dot product.
+
+    Returns:
+        The similarities output by the student and the teacher.
+
+    """
+
+    student_embs = student(data)    
+    # print('*' * 80)
+    # print('Embs')
+    # print(torch.sum(torch.isnan(student_embs)))    
+    if cosine:
+        student_embs = F.normalize(student_embs, p=2, dim=1)           
+
+    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
+
+    with torch.no_grad():
+        teacher_embs, teacher_logits = teacher(data)
+        teacher_probits = torch.max(F.softmax(teacher_logits,dim = 1),dim=1).values        
+        teacher_confidence = teacher_probits * teacher_probits[:,None]        
+        if cosine:
+            teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
+        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+    
+    return student_sims, teacher_sims, teacher_confidence
 
 def get_student_teacher_margin_similarity(student: nn.Module, 
     teacher: nn.Module, data: torch.Tensor,target: torch.Tensor, cosine: bool,margin_value : float) -> tuple([torch.Tensor, torch.Tensor]):

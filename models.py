@@ -176,16 +176,17 @@ class EmbedderAndLogits(nn.Module):
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
-        try:
+        try:            
             self.features = nn.Sequential(*list(model.model.children())[:-1])
-            self.lc = list(model.model.children())[-1]
-        except AttributeError:
+            self.lc = list(model.model.children())[-1]            
+        except AttributeError:            
             self.features = nn.Sequential(*list(model.children())[:-1])
             self.lc = list(model.children())[-1]
             
 
         try:
-            self.dim = model.dim
+            # self.dim = model.dim
+            pass
         except AttributeError:
             if dim is None:
                 raise ValueError('Must specify the model embedding dimension.')
@@ -351,6 +352,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     batchnormalize: bool = False, track_running_stats : bool =True, map_location = None) -> nn.Module:
     """Instantiate or load a specified model.
     
+    
     Args:
         model_str: String specifying the model.
         load: Set to true to load existing model, otherwise instantiate a new one.
@@ -365,7 +367,7 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     Returns:
         The desired model.
     
-    """
+    """    
     checkpointing = False
 
     if get_embedder and truncate_model:

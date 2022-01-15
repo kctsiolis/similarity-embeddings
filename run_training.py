@@ -176,24 +176,23 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     if args.mode == 'linear_classifier' or args.mode == 'random':
         model = Classifier(model, num_classes=num_classes)
 
-    # model.to(device)
+    model.to(device)
 
-    # if args.mode == 'distillation':
-    #     get_embedder = args.distillation_type != 'class-probs'
+    if (args.mode == 'distillation') or (args.mode == 'weighted-distillation'):
+        get_embedder = args.distillation_type != 'class-probs'
+    else:
+        teacher = None
 
-    # else:
-    #     teacher = None
+    if distributed:
+        model = DistributedDataParallel(model, device_ids=[device])
+        if args.mode == 'distillation':
+            teacher = DistributedDataParallel(teacher, device_ids=[device])
 
-    # if distributed:
-    #     model = DistributedDataParallel(model, device_ids=[device])
-    #     if args.mode == 'distillation':
-    #         teacher = DistributedDataParallel(teacher, device_ids=[device])
+    trainer = get_trainer(args.mode, model, teacher,
+                          train_loader, val_loader, device, logger, idx, args)
 
-    # trainer = get_trainer(args.mode, model, teacher,
-    #                       train_loader, val_loader, device, logger, idx, args)
-
-    # trainer.train()
-    print(teacher)
+    trainer.train()
+    # print(teacher)
 
 
 def main():
