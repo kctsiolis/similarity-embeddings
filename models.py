@@ -121,8 +121,6 @@ class Embedder(nn.Module):
         Args:
             model: A model with a classification layer (which will be removed).
             dim: The embedding dimension of the model.
-            batchnormalize: Whether or not to add batch norm after feature embedding.
-            track_running_stats: Which statistics to use for batch norm (if applicable).
 
         """
         super().__init__()
@@ -140,14 +138,6 @@ class Embedder(nn.Module):
                 raise ValueError('Must specify the model embedding dimension.')
             else:
                 self.dim = dim
-
-        """
-        #Whether or not to batch norm the features at the end
-        self.batchnormalize = batchnormalize
-        if batchnormalize:
-            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False,
-                track_running_stats=track_running_stats)
-        """
 
         self.project = project
         if project:
@@ -191,16 +181,13 @@ class TruncatedNet(nn.Module):
         dim: Embedding dimension.
 
     """
-    def __init__(self, model,n, dim=None, batchnormalize=False,
-        track_running_stats=True):
+    def __init__(self, model,n, dim=None):
         """Instantiate object of class Embedder.
 
         Args:
             model: A model with a classification layer (which will be removed).
             n: number of layers to shave off
             dim: The embedding dimension of the model.
-            batchnormalize: Whether or not to add batch norm after feature embedding.
-            track_running_stats: Which statistics to use for batch norm (if applicable).
         
         """
         super().__init__()
@@ -220,19 +207,11 @@ class TruncatedNet(nn.Module):
                 raise ValueError('Must specify the model embedding dimension.')
             else:
                 self.dim = dim
-
-        #Whether or not to batch norm the features at the end
-        self.batchnormalize = batchnormalize
-        if batchnormalize:
-            self.final_normalization = nn.BatchNorm1d(self.dim, affine=False,
-                track_running_stats=track_running_stats)
                 
     def forward(self, x):
         x = self.features(x)
         x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        if self.batchnormalize:
-            x = self.final_normalization(x) #Normalize the output        
+        x = torch.flatten(x, 1)    
         return x
 
     def get_dim(self):
@@ -319,9 +298,20 @@ class Classifier(nn.Module):
 
         return x
 
+class WrapWithProjection(nn.Module):
+    def __init__(self,model:nn.Module,model_output_dim:int,projection_dim:int) -> None:
+        super().__init__()
+        self.model = model
+        self.projection = nn.Parameter(torch.randn([model_output_dim,projection_dim]) / projection_dim)
+        self.projection.requires_grad = False
+    
+    def forward(self,x):        
+        x = torch.matmul(self.model(x), self.projection)
+        return x
+
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
-    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, truncate_model : bool = False,truncation_level : int = -1,
-    batchnormalize: bool = False, track_running_stats : bool =True, map_location = None) -> nn.Module:
+    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, truncate_model : bool = False,
+    truncation_level : int = -1, map_location = None) -> nn.Module:
     """Instantiate or load a specified model.
     
     Args:
@@ -331,8 +321,6 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         one_channel: Whether or not model sees only one colour channel.
         num_classes: Number of classes (if we are classifying).
         get_embedder: Whether or not to only get the feature embedding layers.
-        batchnormalize: Whether or not to apply batch norm to the embeddings.
-        track_running_stats: Which statistics to use for batch norm (if applicable).
         map_location: if 'load' the device to load the model onto
 
     Returns:
@@ -426,22 +414,9 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
             model.load_state_dict(torch.load(load_path,map_location=map_location))
     
     if truncate_model:             
-        model = TruncatedNet(model,n=truncation_level,dim=dim,batchnormalize=batchnormalize,track_running_stats=track_running_stats)
+        model = TruncatedNet(model,n=truncation_level,dim=dim)
 
     if get_embedder:        
         model = Embedder(model, dim=dim)
 
     return model
-
-class WrapWithProjection(nn.Module):
-    def __init__(self,model:nn.Module,model_output_dim:int,projection_dim:int) -> None:
-        super().__init__()
-        self.model = model
-        self.projection = nn.Parameter(torch.randn([model_output_dim,projection_dim]) / projection_dim)
-        self.projection.requires_grad = False
-    
-    def forward(self,x):        
-        x = torch.matmul(self.model(x), self.projection)
-        return x
-
-
