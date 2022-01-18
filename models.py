@@ -303,9 +303,10 @@ class Classifier(nn.Module):
 
         """
         super().__init__()
+        self.embedder = embedder
         self.features = embedder.get_features()
         #Freeze the embedding layer
-        for param in self.features.parameters():
+        for param in self.embedder.parameters():
             param.requires_grad = False
         #Classification layer
         self.linear_layer = nn.Linear(embedder.get_dim(), num_classes)
@@ -313,6 +314,7 @@ class Classifier(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
+        x = torch.flatten(x, 1)
         x = self.linear_layer(x)
 
         return x

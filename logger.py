@@ -64,20 +64,7 @@ class Logger:
             self.log_file = None
             self.results_file = None
             self.model_path = None   
-
-
-            # Noah's hacky solution            
-            self.dir = make_log_dir(args)
-            if not os.path.exists(self.dir):
-                os.mkdir(self.dir)
-            self.log_path = os.path.join(self.dir, 'log.txt')
-            self.results_path = os.path.join(self.dir, 'results.txt')
-            self.model_path = os.path.join(self.dir, 'model.pt')
-            self.plots_dir = os.path.join(self.dir, 'plots')
-            os.mkdir(self.plots_dir)
-            self.log_file = open(self.log_path, 'w')
-            self.results_file = open(self.results_path, 'w')
-            # self.make_header(args)         
+            self.plots_dir = None       
 
     def make_header(self, args: Namespace) -> None:
         """Start the log with a header giving general experiment info.
