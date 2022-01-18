@@ -63,7 +63,7 @@ class Logger:
         else:
             self.log_file = None
             self.results_file = None
-            self.model_path = None
+            self.model_path = None   
             self.plots_dir = None       
 
     def make_header(self, args: Namespace) -> None:

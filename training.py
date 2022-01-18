@@ -325,9 +325,8 @@ class DistillationTrainer(Trainer):
             augmented_data = self.transform(data)
             student_sims = get_model_similarity(
                 self.model, data, augmented_data, self.cosine)
-            with torch.no_grad():
-                teacher_sims = get_model_similarity(
-                    self.teacher, data, augmented_data, self.cosine)
+            teacher_sims = get_model_similarity(
+                self.teacher, data, augmented_data, self.cosine)
 
             loss = self.loss_function(student_sims, teacher_sims)   
 
@@ -574,12 +573,10 @@ def get_student_teacher_similarity(student: nn.Module,
         student_embs = F.normalize(student_embs, p=2, dim=1)           
 
     student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
-
-    with torch.no_grad():
-        teacher_embs = teacher(data)
-        if cosine:
-            teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+    teacher_embs = teacher(data)
+    if cosine:
+        teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
+    teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
     
     return student_sims, teacher_sims
 
@@ -645,15 +642,11 @@ def get_student_teacher_margin_similarity(student: nn.Module,
     
     # print(student_sims)
     
-    
-    
 
-
-    with torch.no_grad():
-        teacher_embs = teacher(data)
-        if cosine:
-            teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
+    teacher_embs = teacher(data)
+    if cosine:
+        teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
+    teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
     
     return student_sims, teacher_sims    
     

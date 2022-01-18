@@ -153,10 +153,12 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         model = get_model(args.student_model, load=load_student,
             load_path=args.student_path, one_channel=one_channel, 
             get_embedder=get_embedder, num_classes=num_classes)
+        model.student_mode()
         teacher = get_model(
             args.teacher_model, load=True, load_path=args.teacher_path, 
             one_channel=one_channel, num_classes=num_classes, 
             get_embedder=get_embedder).to(device) 
+        teacher.teacher_mode()
         if args.wrap_in_projection:
             teacher = WrapWithProjection(teacher,teacher.dim,args.projection_dim).to(device) 
     else:
