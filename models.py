@@ -215,6 +215,7 @@ class EmbedderAndLogits(nn.Module):
         return self.features
 
 
+
 class TruncatedNet(nn.Module):
     """A wrapper class to truncate another model. (A slight reskin of the Embedder class)            
 

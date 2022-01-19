@@ -26,7 +26,7 @@ from loaders import dataset_loader
 
 def get_args(parser):
     """Collect command line arguments."""
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'imagenet'] ,metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar','cifar100', 'imagenet'] ,metavar='D',
         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--split', type=str, choices=['train', 'val', 'test'] ,metavar='D',
         help='Choice of either training, validation, or test subset (where applicable).')
