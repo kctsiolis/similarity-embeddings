@@ -14,6 +14,7 @@ import os
 import torch
 import numpy as np
 from torch import nn
+from torch._C import Value
 import torch.nn.functional as F
 import numpy as np
 import math                                       
@@ -93,7 +94,10 @@ class Trainer():
     def train(self):
         epochs_until_stop = self.early_stop
         for epoch in range(1, self.epochs + 1):
+            epoch_start = time.time()        
             train_loss, train_acc, train_acc5 = self.train_epoch(epoch)
+            epoch_end = time.time()
+            self.logger.log('Epoch Duration: {:.2f} s'.format(epoch_end-epoch_start))
             val_loss, val_acc, val_acc5 = self.validate()
 
             log_str = '\nTraining set: Average loss: {:.6f}\n'.format(
@@ -254,8 +258,7 @@ class DistillationTrainer(Trainer):
     def train_epoch(self, epoch):
         self.model.train()      
         self.teacher.eval()
-        train_loss = AverageMeter()
-        epoch_start = time.time()
+        train_loss = AverageMeter()        
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
             data = data.to(self.device)
@@ -277,8 +280,7 @@ class DistillationTrainer(Trainer):
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
             self.itr += 1
-        epoch_end = time.time()
-        self.logger.log('Epoch Duration: {:.2f} s'.format(epoch_end-epoch_start))
+        
         
         return train_loss.get_avg(), None, None
 
@@ -642,9 +644,7 @@ def get_student_teacher_similarity(student: nn.Module,
         The similarities output by the student and the teacher.
 
     """
-    if not cosine:
-        margin = False
-
+    
     student_embs = student(data)     
     if cosine:
         student_embs = F.normalize(student_embs, p=2, dim=1)           
@@ -678,7 +678,7 @@ def get_weighted_student_teacher_similarity(student: nn.Module,
     # print('Embs')
     # print(torch.sum(torch.isnan(student_embs)))    
     if cosine:
-        student_embs = F.normalize(student_embs, p=2, dim=1)           
+        student_embs = F.normalize(student_embs, p=2, dim=1)    
 
     student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
 

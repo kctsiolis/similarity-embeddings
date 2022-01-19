@@ -258,7 +258,24 @@ class TruncatedNet(nn.Module):
         return x
 
     def get_dim(self):
-        return self.dim        
+        return self.dim   
+
+class MLP(nn.Module):
+    ''' A basic 3 layer MLP '''
+
+    def __init__(self, input_dim: int, num_classes: int, hidden_dim: int = 32) -> None:
+        super(MLP, self).__init__()
+        self.input_dim = input_dim
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, num_classes)
+
+    def forward(self, x):
+        x = x.view(-1, self.input_dim)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x             
 
 class ConvNetEmbedder(nn.Module):
     """Wrapper class for simple CNN embedder.
@@ -353,7 +370,7 @@ class WrapWithProjection(nn.Module):
         return x
 
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
-    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, truncate_model : bool = False,
+    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, project_embedder: bool = False, truncate_model : bool = False,
     truncation_level : int = -1, map_location = None) -> nn.Module:
     """Instantiate or load a specified model.
     
@@ -378,7 +395,10 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     if truncate_model and truncation_level == -1:
         raise ValueError('Need to specify a truncation level if truncating the model')
     
-    if model_str == 'resnet18':
+    if model_str == 'mlp':
+        model = MLP(input_dim=32*32*3, num_classes=num_classes,hidden_dim=256)
+        dim = 256    
+    elif model_str == 'resnet18':
         model = ResNet18(one_channel=one_channel, num_classes=num_classes)
         dim = 512    
     elif model_str == 'resnet50':
@@ -388,21 +408,24 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = ResNet152(one_channel=one_channel, num_classes=num_classes)
         dim = 2048
     elif model_str == 'resnet18_embedder':
-        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes))
+        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes),project=project_embedder)
     elif model_str == 'resnet50_embedder':
-        model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes))
+        model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes),project=project_embedder)
     elif model_str == 'resnet50_classifier':
         model = Classifier(Embedder(ResNet50(one_channel=one_channel,
             num_classes=num_classes)),num_classes=num_classes)        
     elif model_str == 'resnet18_classifier':        
         model = Classifier(Embedder(ResNet18(one_channel=one_channel,
-            num_classes=num_classes)),num_classes=num_classes)        
+            num_classes=num_classes),project=project_embedder),num_classes=num_classes)        
     elif model_str == 'convnet_embedder':
         model = ConvNetEmbedder(one_channel=one_channel)
     elif model_str == 'resnet18_pretrained':
         load = False
         model = ResNet18(one_channel=one_channel, pretrained=True)
         dim = 512
+    elif model_str == 'resnet18_pretrained_embedder':
+        load = False
+        model = Embedder(ResNet18(one_channel=one_channel, pretrained=True),dim=512,project=project_embedder)        
     elif model_str == 'resnet50_pretrained':
         load = False
         model = ResNet50(one_channel=one_channel, pretrained=True)
@@ -420,31 +443,40 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     elif model_str == 'resnet_small_cifar':
         model = cifar_models.ResNet3Layer(num_classes=num_classes)
         dim = 256
+    elif model_str == 'resnet_very_small_cifar':
+        model = cifar_models.ResNet2Layer(num_classes=num_classes)
+        dim = 128
     elif model_str == 'resnet_small_cifar_embedder':
-        model = Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256)   
+        model = Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256,project=project_embedder)           
+    elif model_str == 'resnet_very_small_cifar_embedder':
+        model = Embedder(cifar_models.ResNet2Layer(num_classes=num_classes), dim=128,project=project_embedder)
+    elif model_str == 'resnet_small_cifar_classifier':
+        model = Classifier(Embedder(cifar_models.ResNet3Layer(num_classes=num_classes),project=project_embedder))
+    elif model_str == 'resnet_very_small_cifar_classifier':
+        model = Classifier(Embedder(cifar_models.ResNet2Layer(num_classes=num_classes),project=project_embedder))
     elif model_str == 'simple':
         model = cifar_models.SuperSimpleNet()             
         dim = 84
     elif model_str == 'simple_embedder':
-        model = Embedder(cifar_models.SuperSimpleNet(), dim=84)                       
+        model = Embedder(cifar_models.SuperSimpleNet(), dim=84,project=project_embedder)                       
     elif model_str == 'resnet18_cifar':
         model = cifar_models.ResNet18(num_classes=num_classes)
         dim = 512
     elif model_str == 'resnet18_cifar_embedder':
         model = Embedder(
-            cifar_models.ResNet18(num_classes=num_classes), dim=512)
+            cifar_models.ResNet18(num_classes=num_classes), dim=512,project=project_embedder)
     elif model_str == 'resnet18_cifar_classifier':
         model = Classifier(Embedder(
-            cifar_models.ResNet18(num_classes=num_classes), dim=512),num_classes=num_classes) 
+            cifar_models.ResNet18(num_classes=num_classes), dim=512,project=project_embedder),num_classes=num_classes) 
     elif model_str == 'resnet50_cifar':
         model = cifar_models.ResNet50(num_classes=num_classes)
         dim = 2048
     elif model_str == 'resnet50_cifar_embedder':
         model = Embedder(
-            cifar_models.ResNet50(num_classes=num_classes), dim=2048)
+            cifar_models.ResNet50(num_classes=num_classes), dim=2048,project=project_embedder)
     elif model_str == 'resnet50_cifar_classifier':
         model = Classifier(Embedder(
-            cifar_models.ResNet50(num_classes=num_classes), dim=2048))                   
+            cifar_models.ResNet50(num_classes=num_classes), dim=2048,project=project_embedder))                   
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
         
@@ -461,6 +493,6 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = TruncatedNet(model,n=truncation_level,dim=dim)
 
     if get_embedder:        
-        model = Embedder(model, dim=dim)
+        model = Embedder(model, dim=dim,project=False)
 
     return model

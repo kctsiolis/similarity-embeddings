@@ -77,6 +77,8 @@ def get_args(parser):
                         help='Choice of teacher model (for distillation only).')
     parser.add_argument('--student-model', type=str,
                         help='Choice of student model.')
+    parser.add_argument('--project-embedder', action='store_true',
+                        help='Add a projection head to the embedder')
     parser.add_argument('--cosine', action='store_true',
                         help='Use cosine similarity in the distillation loss.')
     parser.add_argument('--distillation-loss', type=str, choices=['full-similarity', 'sample-similarity', 'class-probs'],
@@ -102,12 +104,12 @@ def get_args(parser):
                         help='Dimension to of projection to wrap the teacher model in')
     parser.add_argument('--margin', action='store_true',
                         help='(For cosine distillation only) Should angular margin be applied ')
+    parser.add_argument('--margin-value', type = float,default = 0.5,
+                        help='If [margin] is selected what should it be set to (Default 0.5)')     
     parser.add_argument('--truncate-model', action = 'store_true',
                         help='Should we truncate the (student) model when training a linear classifier?')                        
     parser.add_argument('--truncation-level', type =int,
-                        help='How many layers to remove to form the truncated (student) model')                                                
-    parser.add_argument('--margin-value', type = float,default = 0.5,
-                        help='If [margin] is selected what should it be set to (Default 0.5)')    
+                        help='How many layers to remove to form the truncated (student) model')                                                     
     parser.add_argument('--no-save', action='store_true',
                         help='Don\'t save the log, plots, and model from this run.')                                                
 
@@ -119,6 +121,7 @@ def get_args(parser):
 def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
     device = torch.device(args.device[idx])
 
+    
     if distributed:
         dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
                                 world_size=num_gpus, rank=idx)
@@ -175,7 +178,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
         teacher = EmbedderAndLogits(teacher).to(device)        
     else:
         model = get_model(args.student_model, load=load_student,
-                          load_path=args.student_path, one_channel=one_channel, get_embedder=True)
+                          load_path=args.student_path, one_channel=one_channel, get_embedder=True,project_embedder=args.project_embedder)
 
     if args.mode == 'linear_classifier' or args.mode == 'random':
         model = Classifier(model, num_classes=num_classes)
@@ -183,7 +186,7 @@ def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Names
     model.to(device)
 
     if (args.mode == 'distillation') or (args.mode == 'weighted-distillation'):
-        get_embedder = args.distillation_type != 'class-probs'
+        get_embedder = args.distillation_loss != 'class-probs'
     else:
         teacher = None
 
