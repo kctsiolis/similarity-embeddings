@@ -13,8 +13,9 @@ Models supported:
     ResNet152arg
 
 Datasets supported:
-    MNIST
     CIFAR-10
+    CIFAR-100
+    TinyImageNet
     ImageNet
 
 """
@@ -33,10 +34,9 @@ from logger import Logger
 
 def get_args(parser):
     """Collect command line arguments."""
-    parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'weighted-distillation', 'similarity',
-                                                     'linear_classifier', 'random'], metavar='D',
+    parser.add_argument('--mode', type=str, choices=['teacher', 'distillation', 'linear_classifier'], metavar='D',
                         help='Training mode.')
-    parser.add_argument('--dataset', type=str, choices=['mnist', 'cifar', 'cifar100', 'imagenet', 'tiny_imagenet'], metavar='D',
+    parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100', 'imagenet', 'tiny_imagenet'], metavar='D',
                         help='Dataset to train and validate on (MNIST or CIFAR).')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='Batch size (default: 64)')
@@ -54,8 +54,6 @@ def get_args(parser):
                         help='random seed (default: 42)')
     parser.add_argument('--train-set-fraction', type=float, default=1.0,
                         help='Fraction of training set to train on (default: 1.0).')
-    parser.add_argument('--validate', action='store_true',
-                        help='Evaluate on a held out validation set (as opposed to the test set).')
     parser.add_argument('--lr-warmup-iters', type=int, default=0,
                         help='Number of iterations (batches) over which to perform learning rate warmup (default: 0).')
     parser.add_argument('--early-stop', type=int, default=10, metavar='E',
@@ -63,41 +61,26 @@ def get_args(parser):
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='Frequency of loss logging in terms of number of iterations (default: 10).')
     parser.add_argument('--save-each-epoch', action='store_true',
-                        help='Save model at each epoch rather than override model each time')
+                        help='Save model at each epoch rather than overwriting model each time')
     parser.add_argument('--plot-interval', type=int,
                         help='Number of iterations between updates of loss plot.')
-    parser.add_argument('--device', type=str, nargs='+', default=['cpu'],
-                        help='Name of CUDA device(s) being used (if any). Otherwise will use CPU. \
-                            Can also specify multiple devices (separated by spaces) for multiprocessing.')
     parser.add_argument('--teacher-path', type=str,
                         help='Path to the teacher model.')
     parser.add_argument('--student-path', type=str,
                         help='Path to the student model.')
     parser.add_argument('--teacher-model', type=str, default=None,
-                        help='Choice of teacher model (for distillation only).')
+                        help='Choice of teacher model.')
     parser.add_argument('--student-model', type=str,
                         help='Choice of student model.')
     parser.add_argument('--project-embedder', action='store_true',
-                        help='Add a projection head to the embedder')
-    parser.add_argument('--cosine', action='store_true',
-                        help='Use cosine similarity in the distillation loss.')
-    parser.add_argument('--distillation-loss', type=str, choices=['full-similarity', 'sample-similarity', 'class-probs'],
-                        default='full-similarity',
+                        help='Add a projection head to the embedder.')
+    parser.add_argument('--distillation-loss', type=str, choices=['similarity-based', 'similarity-weighted', 'kd'],
+                        default='similarity-based',
                         help='Loss used for distillation.')
     parser.add_argument('--augmented-distillation', action='store_true',
                         help='Whether or not to use data augmentation in distillation.')
     parser.add_argument('-c', type=float, default=0.5,
-                        help='Weighing of soft target and hard target loss in class-probs distillation.')
-    parser.add_argument('--augmentation', type=str, choices=['blur', 'jitter', 'crop'], default=None,
-                        help='Data augmentation to use for similarity embedding training.')
-    parser.add_argument('--alpha-max', type=float, default=1.0,
-                        help='Largest possible augmentation strength.')
-    parser.add_argument('--kernel-size', type=int, default=None,
-                        help='Kernel size parameter for Gaussian blur.')
-    parser.add_argument('--beta', type=float, default=1.0,
-                        help='Parameter of similarity probability function p(alpha).')
-    parser.add_argument('--temp', type=float, default=0.01,
-                        help='Temperature in sigmoid function converting similarity score to probability.')
+                        help='Weighing of soft target and hard target loss in Hinton\'s KD.')
     parser.add_argument('--wrap-in-projection', action='store_true',
                         help='Wrap the teacher model in a random projection (For distillation only)')
     parser.add_argument('--projection-dim', type=int, default=None,
@@ -117,110 +100,74 @@ def get_args(parser):
 
     return args
 
-
-def main_worker(idx: int, num_gpus: int, distributed: bool, args: argparse.Namespace):
-    device = torch.device(args.device[idx])
-
-    
-    if distributed:
-        dist.init_process_group(backend='nccl', init_method='tcp://localhost:29501',
-                                world_size=num_gpus, rank=idx)
-
-    batch_size = int(args.batch_size / num_gpus)
-
-    # Get the data
-    train_loader, val_loader = dataset_loader(
-        args.dataset, batch_size, args.train_set_fraction,
-        args.validate, distributed)
-
-    logger = Logger(args, save=(not (args.no_save) and idx == 0))
-    one_channel = args.dataset == 'mnist'
-    if args.dataset == 'imagenet':
-        num_classes = 1000
-    elif args.dataset == 'tiny_imagenet':
-        num_classes = 200
-    elif args.dataset == 'cifar100':
-        num_classes = 100
-    else:
-        # Cifar10 or MNIST
-        num_classes = 10
-
-    load_student = (args.student_path is not None)
-
-    if args.mode == 'teacher' or args.mode == 'random':
-        model = get_model(args.student_model,
-                          one_channel=one_channel, num_classes=num_classes)
-    elif args.mode == 'linear_classifier':
-        model = get_model(
-            args.student_model, load=True, load_path=args.student_path,
-            one_channel=one_channel, num_classes=num_classes, truncate_model=args.truncate_model, truncation_level=args.truncation_level)
-    elif args.mode == 'distillation':
-        get_embedder = args.distillation_loss != 'class-probs'
-        model = get_model(args.student_model, load=load_student,
-                          load_path=args.student_path, one_channel=one_channel,
-                          get_embedder=get_embedder, num_classes=num_classes)
-        teacher = get_model(
-            args.teacher_model, load=True, load_path=args.teacher_path,
-            one_channel=one_channel, num_classes=num_classes,
-            get_embedder=get_embedder).to(device)
-        if args.wrap_in_projection:
-            teacher = WrapWithProjection(
-                teacher, teacher.dim, args.projection_dim).to(device)
-    elif args.mode == 'weighted-distillation':
-        get_embedder = args.distillation_type != 'class-probs'
-        model = get_model(args.student_model, load=load_student,
-                          load_path=args.student_path, one_channel=one_channel,
-                          get_embedder=get_embedder, num_classes=num_classes)
-        teacher = get_model(
-            args.teacher_model, load=True, load_path=args.teacher_path,
-            one_channel=one_channel, num_classes=num_classes,
-            get_embedder=False)
-        teacher = EmbedderAndLogits(teacher).to(device)        
-    else:
-        model = get_model(args.student_model, load=load_student,
-                          load_path=args.student_path, one_channel=one_channel, get_embedder=True,project_embedder=args.project_embedder)
-
-    if args.mode == 'linear_classifier' or args.mode == 'random':
-        model = Classifier(model, num_classes=num_classes)
-
-    model.to(device)
-
-    if (args.mode == 'distillation') or (args.mode == 'weighted-distillation'):
-        get_embedder = args.distillation_loss != 'class-probs'
-    else:
-        teacher = None
-
-    if distributed:
-        model = DistributedDataParallel(model, device_ids=[device])
-        if args.mode == 'distillation':
-            teacher = DistributedDataParallel(teacher, device_ids=[device])
-
-    trainer = get_trainer(args.mode, model, teacher,
-                          train_loader, val_loader, device, logger, idx, args)
-
-    trainer.train()
-    # print(teacher)
-
-
 def main():
     """Load arguments, the dataset, and initiate the training loop."""
-    parser = argparse.ArgumentParser(description='Training the teacher model')
+    parser = argparse.ArgumentParser(description='Training the student model.')
     args = get_args(parser)
 
     # Set random seed
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     if torch.cuda.is_available():
+        device = torch.device('cuda')
         torch.cuda.manual_seed_all(args.seed)
-    #torch.backends.cudnn.deterministic = True
-    #torch.backends.cudnn.benchmark = True
-
-    num_gpus = len(args.device)
-    # If we are doing distributed computation over multiple GPUs
-    if num_gpus > 1:
-        mp.spawn(main_worker, nprocs=num_gpus, args=(num_gpus, True, args))
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
     else:
-        main_worker(0, 1, False, args)
+        device = torch.device('cpu')
+
+    # Get the data
+    train_loader, val_loader, num_classes = dataset_loader(args)
+
+    logger = Logger(args)
+
+    load_student = (args.student_path is not None)
+
+    if args.mode == 'teacher':
+        model = get_model(args.student_model,
+                          num_classes=num_classes)
+    elif args.mode == 'linear_classifier':
+        model = get_model(
+            args.student_model, load=True, load_path=args.student_path,
+            num_classes=num_classes, truncate_model=args.truncate_model, truncation_level=args.truncation_level)
+    elif args.mode == 'distillation':
+        get_embedder = args.distillation_loss != 'kd'
+        model = get_model(args.student_model, load=load_student,
+                          load_path=args.student_path,
+                          get_embedder=get_embedder, num_classes=num_classes)
+        teacher = get_model(
+            args.teacher_model, load=True, load_path=args.teacher_path,
+            num_classes=num_classes, get_embedder=get_embedder).to(device)
+        if args.wrap_in_projection:
+            teacher = WrapWithProjection(
+                teacher, teacher.dim, args.projection_dim).to(device)
+    elif args.mode == 'weighted-distillation':
+        get_embedder = args.distillation_type != 'kd'
+        model = get_model(args.student_model, load=load_student,
+                          load_path=args.student_path,
+                          get_embedder=get_embedder, num_classes=num_classes)
+        teacher = get_model(
+            args.teacher_model, load=True, load_path=args.teacher_path,
+            num_classes=num_classes, get_embedder=False)
+        teacher = EmbedderAndLogits(teacher).to(device)        
+    else:
+        model = get_model(args.student_model, load=load_student,
+                          load_path=args.student_path, get_embedder=True,project_embedder=args.project_embedder)
+
+    if args.mode == 'linear_classifier':
+        model = Classifier(model, num_classes=num_classes)
+
+    model.to(device)
+
+    if (args.mode == 'distillation') or (args.mode == 'weighted-distillation'):
+        get_embedder = args.distillation_loss != 'kd'
+    else:
+        teacher = None
+
+    trainer = get_trainer(args.mode, model, teacher,
+                          train_loader, val_loader, device, logger, args)
+
+    trainer.train()
 
 
 if __name__ == '__main__':

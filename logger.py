@@ -12,10 +12,7 @@ from datetime import datetime
 from argparse import Namespace
 import yaml
 
-try:
-    config = open('../config.yaml', 'r')
-except FileNotFoundError:
-    config = open('config.yaml', 'r')
+config = open('config.yaml', 'r')
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 LOGS_DIR = parsed_config['logs_dir']
 
@@ -37,8 +34,7 @@ class Logger:
 
     """
 
-    def __init__(self, args: Namespace, 
-        save: bool = True, verbose: bool = True):
+    def __init__(self, args: Namespace, verbose: bool = True):
         """Instantiate logger object.
 
         Args:
@@ -48,7 +44,7 @@ class Logger:
         """
         
         self.verbose = verbose
-        self.save = save
+        self.save = not args.no_save
         if self.save:
             self.dir = make_log_dir(args)
             os.mkdir(self.dir)
@@ -78,7 +74,7 @@ class Logger:
         self.log('Dataset: {}'.format(args.dataset))
         if args.mode == 'distillation':
             self.log('Distillation Type: {}'.format(args.distillation_loss))
-            if args.distillation_loss == 'class_probs':
+            if args.distillation_loss == 'kd':
                 self.log('c: {}'.format(args.c))
         self.log('Batch Size: {}'.format(args.batch_size))
         self.log('Learning Rate : {}'.format(args.lr))
@@ -86,13 +82,11 @@ class Logger:
         self.log('Scheduler: {}'.format(args.scheduler))
         self.log('Learning Rate Warmup Iters: {}'.format(args.lr_warmup_iters))
         self.log('Training Set Fraction: {}'.format(args.train_set_fraction))
-        self.log('Validate: {}'.format(args.validate))
         self.log('Seed: {}'.format(args.seed))
         self.log('Max Epochs: {}'.format(args.epochs))
         if args.scheduler == 'plateau':
             self.log('Scheduler Patience: {}'.format(args.plateau_patience))
         self.log('Early Stopping Patience: {}'.format(args.early_stop))
-        self.log('Device: {}'.format(args.device))
         self.log('Model: {}'.format(args.student_model))
         if args.mode == 'distillation':
             self.log('Teacher Model: {}'.format(args.teacher_model))
@@ -101,15 +95,7 @@ class Logger:
             if args.margin:
                 self.log('Margin Value: {}'.format(args.margin_value))
         if args.student_path is not None:
-            self.log('Student Path: {}'.format(args.student_path))
-        if args.mode == 'similarity' or args.mode == 'distillation':
-            self.log('Cosine Similarity: {}'.format(args.cosine))
-        if args.mode == 'similarity':
-            if args.loss == 'kl':
-                self.log('Temp: {}'.format(args.temp))
-            self.log('Augmentation: {}'.format(args.augmentation))
-            self.log('Alpha Max: {}'.format(args.alpha_max))
-            self.log('Beta: {}'.format(args.beta))            
+            self.log('Student Path: {}'.format(args.student_path))     
 
     def log(self, string: str) -> None:
         """Write a string to the log.
@@ -151,19 +137,8 @@ def make_log_dir(args: Namespace) -> None:
 
     exp_name_start = '{}_{}_batch={}_lr={}_optim={}_seed={}_model={}'.format(
         args.mode, args.dataset, args.batch_size, args.lr, args.optimizer, args.seed, args.student_model)
-    if args.mode == 'similarity' or args.mode == 'distillation':
+    if args.mode == 'distillation':
         exp_name_cosine = exp_name_start + '_cosine={}'.format(args.cosine)
-    if args.mode == 'similarity':
-        exp_name_loss = exp_name_cosine + '_loss={}'.format(args.loss)
-        exp_name_augmentation = exp_name_loss + '_augmentation={}'.format(args.augmentation)
-        exp_name_alphamax = exp_name_augmentation + '_alphamax={}'.format(args.alpha_max)
-        exp_name_beta = exp_name_alphamax + '_beta={}'.format(args.beta)
-        if args.loss == 'kl':
-            exp_name_temp = exp_name_beta + '_temp={}'.format(args.temp)
-            dir = os.path.join(LOGS_DIR, exp_name_temp)
-        else:
-            dir = os.path.join(LOGS_DIR, exp_name_beta)
-    elif args.mode == 'distillation':
         dir = os.path.join(LOGS_DIR, exp_name_cosine)
     else:
         dir = os.path.join(LOGS_DIR, exp_name_start)
@@ -178,4 +153,3 @@ def make_log_dir(args: Namespace) -> None:
         return new_dir
     else:
         return dir
-

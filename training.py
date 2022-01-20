@@ -14,29 +14,31 @@ import os
 import torch
 import numpy as np
 from torch import nn
-from torch._C import Value
 import torch.nn.functional as F
-import numpy as np
-import math                                       
+import numpy as np                                    
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
-from data_augmentation import make_augmentation, Augmentation, SimCLRTransform
 from logger import Logger
 import time
+
+from distillers import SimilarityDistiller, KD, WeightedDistiller
 
 class Trainer():
 
     def __init__(
             self, model: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, logger: Logger,
-            rank: int, args: Namespace):
+            args: Namespace):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.eval_set = 'Validation' if args.validate else 'Test'
+        if args.dataset == 'cifar10' or args.dataset == 'cifar100':
+            self.eval_set = 'Test'
+        else:
+            self.eval_set = 'Validation'
         self.device = device
         self.epochs = args.epochs
         self.itr = 0
@@ -70,8 +72,6 @@ class Trainer():
         self.logger = logger
         self.model_path = logger.get_model_path()        
         self.plots_dir = logger.get_plots_dir()
-        self.rank = rank
-        self.num_devices = len(args.device)
 
         self.iters = [] 
         self.logged_train_losses = []
@@ -119,6 +119,11 @@ class Trainer():
             self.train_accs5.append(train_acc5)
             self.val_accs5.append(val_acc5)
 
+            if self.save_each_epoch:
+                name, ext = os.path.splitext(self.model_path)                        
+                current_model_path = f'{name}_epoch{epoch}{ext}'
+                self.save_model(current_model_path)
+
             #Check if validation loss is worsening
             if val_loss > min(self.val_losses):
                 epochs_until_stop -= 1
@@ -127,20 +132,11 @@ class Trainer():
             else:
                 epochs_until_stop = self.early_stop
 
-                #Save the current model (as it is the best one so far)
-                if self.rank == 0 and self.logger.save:
+                #Save the current model
+                if self.logger.save:
                     if self.model_path is not None:
-                        if self.save_each_epoch:
-                            name, ext = os.path.splitext(self.model_path)                        
-                            current_model_path = f'{name}_epoch{epoch}{ext}'
-                        else:
-                            current_model_path = self.model_path
-                        self.logger.log("Saving model...")
-                        if self.num_devices > 1:
-                            torch.save(self.model.module.state_dict(), current_model_path)
-                        else:
-                            torch.save(self.model.state_dict(), current_model_path)
-                        self.logger.log("Model saved.\n")
+                        current_model_path = self.model_path
+                        self.save_model(current_model_path)
 
             if self.sched_str == 'plateau':
                 self.scheduler.step(val_loss)
@@ -151,8 +147,7 @@ class Trainer():
             else:
                 self.scheduler.step()
 
-        if self.rank == 0:
-            self.train_report()
+        self.train_report()
 
     def train_epoch(self, epoch):
         pass
@@ -186,13 +181,22 @@ class Trainer():
             train_val_plots(
                 self.train_accs, self.val_accs, "Accuracy", self.plots_dir, self.change_epochs)
 
+    def save_model(self, path):
+        self.logger.log('Saving model...')
+        torch.save({
+            'epoch': self.epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }, path)
+        self.logger.log('Model saved.')
+
 class SupervisedTrainer(Trainer):
     def __init__(
             self, model: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, logger: Logger,
-            rank: int, args: Namespace):
+            args: Namespace):
         super().__init__(
-            model, train_loader, val_loader, device, logger, rank, args)
+            model, train_loader, val_loader, device, logger, args)
         self.loss_function = nn.CrossEntropyLoss()
 
     def train_epoch(self, epoch):
@@ -217,7 +221,7 @@ class SupervisedTrainer(Trainer):
                 self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
                 self.logged_train_losses.append(logged_loss)
                 log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
+                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset)),
                     100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
             if batch_idx % self.plot_interval == 0 and self.logger.save:
@@ -236,27 +240,23 @@ class DistillationTrainer(Trainer):
     def __init__(
             self, model: nn.Module, teacher: nn.Module, train_loader: DataLoader, 
             val_loader: DataLoader, device: torch.device, logger: Logger,
-            rank: int, args: Namespace):
+            args: Namespace):
         super().__init__(
-            model, train_loader, val_loader, device, logger, rank, args)
+            model, train_loader, val_loader, device, logger, args)
+        self.student = self.model
         self.teacher = teacher
-        self.cosine = args.cosine
         self.margin = args.margin
         self.margin_value = args.margin_value
-        self.augment = args.augmented_distillation
-        self.transform = SimCLRTransform()
         self.loss_type = args.distillation_loss
-        if self.loss_type != 'class-probs':
-            self.loss_function = nn.MSELoss()
+        if self.loss_type == 'similarity-based':
+            self.distiller = SimilarityDistiller(args.augmented_distillation)
+        elif self.loss_type == 'similarity-weighted':
+            self.distiller = WeightedDistiller()
         else:
-            self.loss_function = nn.KLDivLoss(reduction='batchmean')
-            self.sup_loss_function = nn.CrossEntropyLoss()
-            if args.c < 0 or args.c > 1:
-                raise ValueError('c must be in [0,1].')
-            self.c = args.c
+            self.distiller = KD(args.c)
 
     def train_epoch(self, epoch):
-        self.model.train()      
+        self.student.train()      
         self.teacher.eval()
         train_loss = AverageMeter()        
         for batch_idx, (data, target) in enumerate(self.train_loader):
@@ -264,7 +264,7 @@ class DistillationTrainer(Trainer):
             data = data.to(self.device)
             target = target.to(self.device)
             self.optimizer.zero_grad()            
-            loss = self.compute_loss(data, target)
+            loss = self.distiller.compute_loss(self.student, self.teacher, data, target)
             train_loss.update(loss.item())
             loss.backward()
             self.optimizer.step()
@@ -273,7 +273,7 @@ class DistillationTrainer(Trainer):
                 self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
                 self.logged_train_losses.append(logged_loss)
                 log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
+                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset)),
                     100. * batch_idx / len(self.train_loader), logged_loss)
                 self.logger.log(log_str)
             if batch_idx % self.plot_interval == 0 and self.logger.save:
@@ -292,202 +292,23 @@ class DistillationTrainer(Trainer):
             for data, target in self.val_loader:
                 data = data.to(self.device)
                 target = target.to(self.device)
-                loss += self.compute_loss(data, target).item()
+                loss += self.distiller.compute_loss(self.student, self.teacher, data, target).item()
 
         loss = loss / len(self.val_loader)
 
         return loss, None, None
-
-    def compute_loss(self, data, target):
-        if self.loss_type == 'class-probs':
-            if self.augmented:
-                data = self.transform(data)
-            output = self.model(data)
-            model_probs = nn.LogSoftmax(dim=1)(output)
-            teacher_probs = nn.Softmax(dim=1)(self.teacher(data))            
-            loss = self.c * self.loss_function(model_probs, teacher_probs) + \
-                (1-self.c) * self.sup_loss_function(output, target)
-        elif self.margin:
-            #Margin automatically computes full similarity
-            # Requires targets for intra/inter class margin
-            student_sims, teacher_sims = get_student_teacher_margin_similarity(
-                self.model, self.teacher, data, target, self.cosine, self.margin_value) 
-            loss = self.loss_function(student_sims, teacher_sims)  
-        elif self.loss_type == 'full-similarity':
-            if self.augment:
-                data = self.transform(data, num_views=2)
-                data = torch.cat(data, dim=0)
-            
-            student_sims, teacher_sims = get_student_teacher_similarity(
-                self.model, self.teacher, data, self.cosine)
-
-            loss = self.loss_function(student_sims, teacher_sims)  
-        else:
-            #Sample-based similarity
-            #Computes similarity between original and augmented image
-            augmented_data = self.transform(data)
-            student_sims = get_model_similarity(
-                self.model, data, augmented_data, self.cosine)
-            teacher_sims = get_model_similarity(
-                self.teacher, data, augmented_data, self.cosine)
-
-            loss = self.loss_function(student_sims, teacher_sims)   
-
-        return loss
-
-
-class WeightedDistillationTrainer(Trainer):
-    def __init__(
-            self, model: nn.Module, teacher: nn.Module, train_loader: DataLoader, 
-            val_loader: DataLoader, device: torch.device, logger: Logger,
-            rank: int, args: Namespace):
-        super().__init__(
-            model, train_loader, val_loader, device, logger, rank, args)
-        self.teacher = teacher
-        self.cosine = args.cosine
-        self.margin = args.margin
-        self.margin_value = args.margin_value
-        self.distillation_type = args.distillation_type
-        self.loss_function = nn.MSELoss()
-
-    def train_epoch(self, epoch):
-        self.model.train()      
-        self.teacher.eval()
-        train_loss = AverageMeter()
-        aug = SimCLRTransform()
-        for batch_idx, (data, target) in enumerate(self.train_loader):
-            self.update_lr()
-            data = data.to(self.device)
-            target = target.to(self.device)
-            if self.distillation_type == 'simclr':
-                data = aug.apply_transform(data)
-            self.optimizer.zero_grad()            
-            loss = self.compute_loss(data, target)
-            train_loss.update(loss.item())
-            loss.backward()
-            self.optimizer.step()
-            if batch_idx % self.log_interval == 0:
-                logged_loss = train_loss.get_avg()
-                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
-                self.logged_train_losses.append(logged_loss)
-                log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
-                    100. * batch_idx / len(self.train_loader), logged_loss)
-                self.logger.log(log_str)
-            if batch_idx % self.plot_interval == 0:
-                train_loss_plot(
-                    self.iters, self.logged_train_losses, self.plots_dir)
-            self.itr += 1
-        
-        return train_loss.get_avg(), None, None
-
-    def validate(self):
-        self.model.eval()
-        self.teacher.eval()
-        loss = 0
-        with torch.no_grad():
-            for data, target in self.val_loader:
-                data = data.to(self.device)
-                target = target.to(self.device)
-                loss += self.compute_loss(data, target).item()
-
-        loss = loss / len(self.val_loader)
-
-        return loss, None, None
-
-    def compute_loss(self, data, target):        
-        # Unsupervised learning - (well supervised by the teacher)
-        student_sims, teacher_sims, teacher_confidence = get_weighted_student_teacher_similarity(self.model, self.teacher, data, self.cosine)                        
-        loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0] 
-
-        return loss
-
-
-
-
-
-
-
-class SimilarityTrainer(Trainer):
-    def __init__(
-            self, model: nn.Module, train_loader: DataLoader, 
-            val_loader: DataLoader, device: torch.device, logger: Logger,
-            rank: int, args: Namespace):
-        super().__init__(
-            model, train_loader, val_loader, device, logger, rank, args)
-        self.augmentation = make_augmentation(
-            args.augmentation, alpha_max=args.alpha_max, 
-            kernel_size=args.kernel_size, device=device)
-        self.beta = args.beta
-        self.temp = args.temp
-        self.cosine = args.cosine
-        self.loss_function = nn.MSELoss()
-
-    def train_epoch(self, epoch):
-        self.model.train()
-        train_loss = AverageMeter()
-        for batch_idx, (data, _) in enumerate(self.train_loader):
-            self.update_lr()
-            data = data.to(self.device)
-            self.optimizer.zero_grad()
-            
-            #Get augmented data, target probabilities, and model probabilities
-            with torch.no_grad():
-                augmented_data, alpha = self.augmentation.augment(data)
-                target = get_sim_prob(alpha, self.beta)
-            model_sims = get_model_similarity(self.model, data, augmented_data, self.cosine)
-
-            if isinstance(self.loss_function, nn.KLDivLoss):
-                output = get_model_probability(model_sims, self.temp)
-                eps = 1e-7 #Constant to prevent log(0)
-                output_comp = 1 - output
-                output = torch.stack((output, output_comp), dim=1)
-                #KL Divergence expects output to be log probability distribution
-                output = (output + eps).log()
-                target_comp = 1 - target
-                target = torch.stack((target, target_comp), dim=1)
-            else:
-                output = model_sims
-
-            loss = self.loss_function(output, target)
-            train_loss.update(loss.item())
-            loss.backward()
-            self.optimizer.step()
-            if batch_idx % self.log_interval == 0:
-                logged_loss = train_loss.get_avg()
-                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
-                self.logged_train_losses.append(logged_loss)
-                log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
-                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset) / self.num_devices),
-                    100. * batch_idx / len(self.train_loader), logged_loss)
-                self.logger.log(log_str)
-            if batch_idx % self.plot_interval == 0 and self.logger.save:
-                train_loss_plot(
-                    self.iters, self.logged_train_losses, self.plots_dir)
-            self.itr += 1
-
-        return train_loss.get_avg(), None, None
-
-    def validate(self):
-        return compute_similarity_loss(
-            self.model, self.device, self.val_loader, self.loss_function,
-            self.aug, self.alpha_max, self.beta, self.cosine, self.temp), None, None
 
 def get_trainer(mode: str, model: nn.Module, teacher: nn.Module, 
         train_loader: DataLoader, val_loader: DataLoader, device: torch.device, 
-        logger: Logger, rank: int, args: Namespace):
+        logger: Logger, args: Namespace):
     if mode == 'teacher' or mode == 'linear_classifier' or mode == 'random':
         return SupervisedTrainer(
-            model, train_loader, val_loader, device, logger, rank, args)
+            model, train_loader, val_loader, device, logger, args)
     elif mode == 'distillation':
         return DistillationTrainer(
-            model, teacher, train_loader, val_loader, device, logger, rank, args)
-    elif mode == 'weighted-distillation':
-        return WeightedDistillationTrainer(
-            model, teacher, train_loader, val_loader, device, logger, rank, args)
+            model, teacher, train_loader, val_loader, device, logger, args)
     else:
-        return SimilarityTrainer(
-            model, train_loader, val_loader, device, logger, rank, args)
+        return NotImplementedError
 
 def predict(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
@@ -629,148 +450,15 @@ def get_labels(loader: torch.utils.data.DataLoader) -> np.ndarray:
         labels = np.concatenate((labels, target))
 
     return labels
-
-def get_student_teacher_similarity(student: nn.Module, 
-    teacher: nn.Module, data: torch.Tensor, cosine: bool) -> tuple([torch.Tensor, torch.Tensor]):
-    """Get similarities between instances, as given by student and teacher
-
-    Args:
-        student: The student model.
-        teacher: The teacher model.
-        data: The input.
-        cosine: Set to true to compute cosine similarity, otherwise dot product.
-
-    Returns:
-        The similarities output by the student and the teacher.
-
-    """
-    
-    student_embs = student(data)     
-    if cosine:
-        student_embs = F.normalize(student_embs, p=2, dim=1)           
-
-    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
-    teacher_embs = teacher(data)
-    if cosine:
-        teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-    teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
-    
-    return student_sims, teacher_sims
-
-
-def get_weighted_student_teacher_similarity(student: nn.Module, 
-    teacher: nn.Module, data: torch.Tensor, cosine: bool) -> tuple([torch.Tensor, torch.Tensor]):
-    """Get similarities between instances, as given by student and teacher
-
-    Args:
-        student: The student model.
-        teacher: The teacher model.
-        data: The input.
-        cosine: Set to true to compute cosine similarity, otherwise dot product.
-
-    Returns:
-        The similarities output by the student and the teacher.
-
-    """
-
-    student_embs = student(data)    
-    # print('*' * 80)
-    # print('Embs')
-    # print(torch.sum(torch.isnan(student_embs)))    
-    if cosine:
-        student_embs = F.normalize(student_embs, p=2, dim=1)    
-
-    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
-
-    with torch.no_grad():
-        teacher_embs, teacher_logits = teacher(data)
-        teacher_probits = torch.max(F.softmax(teacher_logits,dim = 1),dim=1).values        
-        teacher_confidence = teacher_probits * teacher_probits[:,None]        
-        if cosine:
-            teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-        teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
-    
-    return student_sims, teacher_sims, teacher_confidence
-
-def get_student_teacher_margin_similarity(student: nn.Module, 
-    teacher: nn.Module, data: torch.Tensor,target: torch.Tensor, cosine: bool,margin_value : float) -> tuple([torch.Tensor, torch.Tensor]):
-    """Get similarities between instances WITH MARGIN, as given by student and teacher
-
-    Args:
-        student: The student model.
-        teacher: The teacher model.
-        data: The input.
-        target: Labels        
-        cosine: Set to true to compute cosine similarity, otherwise dot product.
-        margin_value: margin value
-
-    Returns:
-        The similarities between the student and the teacher.
-
-    """
-    if not cosine:
-        raise ValueError('Non-cosine similarity incompatable with margin')
-
-
-    student_embs = student(data)        
-    if cosine:
-        student_embs = F.normalize(student_embs, p=2, dim=1)           
-
-    student_sims = torch.matmul(student_embs, student_embs.transpose(0,1))    
-
-    #### Add margin to similarities
-    # Using the identity cos(x +- m) = cos(x)cos(m) -+ sin(m)sin(x)                
-    sine = torch.sqrt((1.0 - torch.pow(student_sims, 2)) + 1e-6).clamp(0,1) # add 1e-6 for numerical stability                                             
-
-    # only apply margin to samples in different classes
-    n = target.shape[0]
-    device = target.get_device()    
-    margin_mask = target.unsqueeze(1).repeat(1,n) == target.repeat(n,1)    
-    
-    # ### Interclass margin only
-    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
-    # sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-    # cosm[margin_mask] = 1
-    # sinm[margin_mask] = 0
-
-    #### Intra and Inter class margin
-    cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
-    cosm[margin_mask] = math.cos(0.001) # Inter-class margin should be smaller
-    sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-    sinm[margin_mask] = -math.sin(0.001) # Inter-class margin should be smaller
-
-    # # Just intraclass margin
-    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
-    # sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
-    # cosm[~margin_mask] = 1
-    # sinm[~margin_mask] = 0
-
-    
-
-    # print('*' * 80)                        
-    # print(margin_mask)    
-    # print(student_sims)
-    student_sims = (torch.mul(student_sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)            
-    
-    # print(student_sims)
-    
-
-    teacher_embs = teacher(data)
-    if cosine:
-        teacher_embs = F.normalize(teacher_embs, p=2, dim=1)
-    teacher_sims = torch.matmul(teacher_embs, teacher_embs.transpose(0,1))
-    
-    return student_sims, teacher_sims    
     
 def get_model_similarity(model: nn.Module, data: torch.Tensor, 
-    augmented_data: torch.Tensor, cosine: bool) -> torch.Tensor:
+    augmented_data: torch.Tensor) -> torch.Tensor:
     """Get similarities between original and augmented data, as predicted by the model. 
 
     Args:
         model: The model.
         data: The input.
         augmented_data: The augmented input.
-        cosine: Set to true to compute cosine similarity, otherwise dot product.
 
     Returns:
         The similarities output by the model.
@@ -781,73 +469,10 @@ def get_model_similarity(model: nn.Module, data: torch.Tensor,
     #Get embeddings of augmented data
     augmented_data_embs = model(augmented_data)
 
-    if cosine: #Using cosine similarity
-        data_embs = F.normalize(data_embs, p=2, dim=1)
-        augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
+    data_embs = F.normalize(data_embs, p=2, dim=1)
+    augmented_data_embs = F.normalize(augmented_data_embs, p=2, dim=1)
 
     return torch.sum(data_embs * augmented_data_embs, dim=1)
-
-def get_model_probability(sims: torch.Tensor, temp: float = 1.0
-    ) -> torch.Tensor:
-    """Get model's probability of similarity via sigmoid.
-
-    Args:
-        sims: Model similarities.
-        temp: Temperature hyperparameter for sigmoid.
-
-    Returns:
-        Model's probability of similarity.
-
-    """
-    return 1 / (1 + torch.exp(-temp * sims))
-
-def compute_similarity_loss(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
-    augmentation: Augmentation, beta: float, cosine: bool, temp: float) -> float:
-    """Compute the similarity-based embedding loss.
-
-    Args:
-        model: The model being evaluated.
-        device: The device that the model and data are stored on.
-        loader: The data.
-        loss_function: The loss function.
-        augmentation: Type of data augmentation being used.
-        beta: Similarity probability parameter
-        cosine: Whether or not cosine similarity is being used.
-        temp: Temperature hyperparameter for sigmoid.
-
-    Returns:
-        The similarity loss.
-
-    """
-    model.eval()
-    loss = 0
-    with torch.no_grad():
-        for data, _ in loader:
-            data = data.to(device)
-            augmented_data, alpha = augmentation.augment(data)
-            target = get_sim_prob(alpha, beta)
-            model_sims = get_model_similarity(model, data, augmented_data, cosine)
-            if isinstance(loss_function, nn.KLDivLoss):
-                #KL Divergence expects output to be log probability distribution
-                eps = 1e-7
-                output = get_model_probability(model_sims, temp)
-                output_comp = 1 - output
-                output = torch.stack((output, output_comp), dim=1)
-                output = (output + eps).log()
-                target_comp = 1 - target
-                target = torch.stack((target, target_comp), dim=1)
-            else:
-                output = model_sims
-                
-            loss += loss_function(output, target).item()
-
-    loss = loss / len(loader)
-
-    return loss
-
-def get_sim_prob(alpha, beta):
-    return torch.exp(-beta * alpha)
 
 def train_loss_plot(iters: list([float]), train_vals: list([float]), 
     save_dir: str) -> None:
@@ -857,7 +482,6 @@ def train_loss_plot(iters: list([float]), train_vals: list([float]),
     plt.ylabel('Training Loss')
     plt.savefig(save_dir + '/train_loss_plot.png')
     plt.close()
-
 
 def train_val_plots(train_vals: list([float]), val_vals: list([float]), 
     y_label: str, save_dir: str, change_epochs: list([int])) -> None:
