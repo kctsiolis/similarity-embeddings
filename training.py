@@ -93,6 +93,7 @@ class Trainer():
 
     def train(self):
         epochs_until_stop = self.early_stop
+        training_start = time.time()        
         for epoch in range(1, self.epochs + 1):
             epoch_start = time.time()        
             train_loss, train_acc, train_acc5 = self.train_epoch(epoch)
@@ -150,6 +151,8 @@ class Trainer():
                     self.logger.log("Learning rate decreasing to {}\n".format(lr))
             else:
                 self.scheduler.step()
+
+        self.logger.log('Training Duration: {:.2f} s'.format(time.time()-training_start))
 
         if self.rank == 0:
             self.train_report()
