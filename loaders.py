@@ -14,7 +14,7 @@ parsed_config = yaml.load(config, Loader=yaml.FullLoader)
 imagenet_path = parsed_config['imagenet_path']
 tiny_imagenet_path = parsed_config['tiny_imagenet_path']
 
-def dataset_loader(args) -> tuple([DataLoader, DataLoader]):
+def get_loader(args) -> tuple([DataLoader, DataLoader]):
     """Load a specified dataset.
 
     Args:

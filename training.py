@@ -298,18 +298,6 @@ class DistillationTrainer(Trainer):
 
         return loss, None, None
 
-def get_trainer(mode: str, model: nn.Module, teacher: nn.Module, 
-        train_loader: DataLoader, val_loader: DataLoader, device: torch.device, 
-        logger: Logger, args: Namespace):
-    if mode == 'teacher' or mode == 'linear_classifier' or mode == 'random':
-        return SupervisedTrainer(
-            model, train_loader, val_loader, device, logger, args)
-    elif mode == 'distillation':
-        return DistillationTrainer(
-            model, teacher, train_loader, val_loader, device, logger, args)
-    else:
-        return NotImplementedError
-
 def predict(model: nn.Module, device: torch.device, 
     loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
     precision: str = '32', calculate_confusion: bool = False) -> tuple([float, float]):
