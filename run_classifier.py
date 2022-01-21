@@ -1,5 +1,5 @@
 from run_base import get_base_args, run_base
-from models import get_model, Classifier
+from models import get_model
 import argparse
 from logger import Logger
 from training import SupervisedTrainer
@@ -26,7 +26,7 @@ def main():
     train_loader, val_loader, num_classes, device = run_base(args)
     logger = Logger('linear_classifier', args)
     model = get_model(args.model, args.model_path, num_classes=num_classes)
-    model = Classifier(model, num_classes=num_classes)
+    model.probing_mode()
     model.to(device)
     trainer = SupervisedTrainer(model, train_loader, val_loader, device, logger, args)
     trainer.train()

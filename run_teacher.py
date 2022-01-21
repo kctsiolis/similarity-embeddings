@@ -26,6 +26,7 @@ def main():
     train_loader, val_loader, num_classes, device = run_base(args)
     logger = Logger('teacher', args)
     teacher = get_model(args.teacher_model, args.teacher_path, num_classes=num_classes)
+    teacher.end_to_end_mode()
     teacher.to(device)
     trainer = SupervisedTrainer(teacher, train_loader, val_loader, device, logger, args)
     trainer.train()

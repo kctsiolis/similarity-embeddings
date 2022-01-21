@@ -122,7 +122,7 @@ class Trainer():
             if self.save_each_epoch:
                 name, ext = os.path.splitext(self.model_path)                        
                 current_model_path = f'{name}_epoch{epoch}{ext}'
-                self.save_model(current_model_path)
+                self.save_model(current_model_path, epoch)
 
             #Check if validation loss is worsening
             if val_loss > min(self.val_losses):
@@ -136,7 +136,7 @@ class Trainer():
                 if self.logger.save:
                     if self.model_path is not None:
                         current_model_path = self.model_path
-                        self.save_model(current_model_path)
+                        self.save_model(current_model_path, epoch)
 
             if self.sched_str == 'plateau':
                 self.scheduler.step(val_loss)
@@ -175,16 +175,17 @@ class Trainer():
                 self.eval_set, self.val_accs5[best_epoch]))
 
         #Save loss and accuracy plots
-        train_val_plots(
-            self.train_losses, self.val_losses, "Loss", self.plots_dir, self.change_epochs)
-        if self.train_accs is not None and self.val_accs is not None:
+        if self.logger.save:
             train_val_plots(
-                self.train_accs, self.val_accs, "Accuracy", self.plots_dir, self.change_epochs)
+                self.train_losses, self.val_losses, "Loss", self.plots_dir, self.change_epochs)
+            if self.train_accs is not None and self.val_accs is not None:
+                train_val_plots(
+                    self.train_accs, self.val_accs, "Accuracy", self.plots_dir, self.change_epochs)
 
-    def save_model(self, path):
+    def save_model(self, path, epoch):
         self.logger.log('Saving model...')
         torch.save({
-            'epoch': self.epoch,
+            'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
         }, path)

@@ -1,5 +1,5 @@
 from run_base import get_base_args, run_base
-from models import get_model, WrapWithProjection, EmbedderAndLogits
+from models import get_model
 from training import DistillationTrainer
 from logger import Logger
 import argparse
@@ -49,27 +49,14 @@ def main():
     parser = argparse.ArgumentParser(description='Training the student model.')
     args = get_args(parser)
 
-    train_loader, val_loader, num_classes, device = run_base(args)
+    train_loader, val_loader, _, device = run_base(args)
     logger = Logger('distillation', args)
 
-    if args.distillation_loss != 'weighted-distillation':
-        get_embedder = args.distillation_loss != 'kd'
-        student = get_model(
-            args.student_model, load_path=args.student_path,
-            get_embedder=get_embedder, num_classes=num_classes)
-        teacher = get_model(
-            args.teacher_model, load=True, load_path=args.teacher_path,
-            num_classes=num_classes, get_embedder=get_embedder)
-        if args.wrap_in_projection:
-            teacher = WrapWithProjection(
-                teacher, teacher.dim, args.projection_dim)
-    else:
-        student = get_model(args.student_model, load_path=args.student_path,
-                          get_embedder=True, num_classes=num_classes)
-        teacher = get_model(
-            args.teacher_model, load=True, load_path=args.teacher_path,
-            num_classes=num_classes, get_embedder=False)
-        teacher = EmbedderAndLogits(teacher)
+    
+    student = get_model(args.student_model, load_path=args.student_path)
+    student.student_mode()
+    teacher = get_model(args.teacher_model, load_path=args.teacher_path)
+    teacher.teacher_mode()
 
     student.to(device)
     teacher.to(device)

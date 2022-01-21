@@ -199,7 +199,7 @@ def cifar_loader(args, cifar10 : bool = True
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False)
 
     train_loader = DataLoader(
-        train_transformed, batch_size=args.batch_size, num_workers=0,
+        train_transformed, batch_size=args.batch_size, num_workers=8,
         pin_memory=True)
 
     return train_loader, test_loader, num_classes
