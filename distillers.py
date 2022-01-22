@@ -46,8 +46,8 @@ def get_margin_similarity(model, data, target, margin_value):
     # print(student_sims)
     return (torch.mul(sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)  
 
-def get_weighted_similarity(model, data, target):
-    embs, logits = model(data)
+def get_weighted_similarity(model, data):
+    embs, logits = model.embs_and_logits(data)
     probits = torch.max(F.softmax(logits,dim = 1),dim=1).values        
     confidence = probits * probits[:,None]        
     embs = F.normalize(embs, p=2, dim=1)
@@ -93,6 +93,6 @@ class WeightedDistiller():
 
     def compute_loss(self, student, teacher, data, target):
         student_sims = get_similarity(student, data)
-        teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data, target)
+        teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data)
         loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0] 
         return loss

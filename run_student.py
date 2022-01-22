@@ -53,10 +53,12 @@ def main():
     logger = Logger('distillation', args)
 
     
-    student = get_model(args.student_model, load_path=args.student_path)
-    student.student_mode()
-    teacher = get_model(args.teacher_model, load_path=args.teacher_path)
-    teacher.teacher_mode()
+    student = get_model(args.student_model, load_path=args.student_path, project=args.project_embedder)
+    if args.distillation_loss != 'kd':
+        student.student_mode()
+    teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder)
+    classify = args.distillation_loss == 'kd'
+    teacher.teacher_mode(classify)
 
     student.to(device)
     teacher.to(device)
