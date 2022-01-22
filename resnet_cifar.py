@@ -57,7 +57,7 @@ class BasicBlock(nn.Module):
 
 
 class ResNetCIFAR(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+    def __init__(self, block, num_blocks, num_classes=10, project=False, projection_dim=None):
         super(ResNetCIFAR, self).__init__()
         self.in_planes = 16
 
@@ -69,6 +69,15 @@ class ResNetCIFAR(nn.Module):
         self.linear = nn.Linear(64, num_classes)
         self.dim = 64
 
+        self.project = project
+        if project:
+            if projection_dim is not None:
+                projection_dim = self.dim
+            self.projection = nn.Sequential(
+                nn.Linear(self.dim, projection_dim),
+                nn.ReLU(),
+                nn.Linear(projection_dim, projection_dim)
+            )
         self.classify = True
 
         self.apply(_weights_init)
@@ -89,6 +98,8 @@ class ResNetCIFAR(nn.Module):
         out = self.layer3(out)
         out = F.avg_pool2d(out, out.size()[3])
         out = out.view(out.size(0), -1)
+        if self.project:
+            out = self.projection(out)
         if self.classify:
             out = self.linear(out)
         return out
@@ -117,25 +128,25 @@ class ResNetCIFAR(nn.Module):
             param.requires_grad = True
         self.classify = True
 
-def resnet20_cifar(num_classes):
-    return ResNetCIFAR(BasicBlock, [3, 3, 3], num_classes)
+def resnet20_cifar(num_classes, project=False, projection_dim=None):
+    return ResNetCIFAR(BasicBlock, [3, 3, 3], num_classes, project, projection_dim)
 
 
-def resnet32_cifar(num_classes):
-    return ResNetCIFAR(BasicBlock, [5, 5, 5], num_classes)
+def resnet32_cifar(num_classes, project=False, projection_dim=None):
+    return ResNetCIFAR(BasicBlock, [5, 5, 5], num_classes, project, projection_dim)
 
 
-def resnet44_cifar(num_classes):
-    return ResNetCIFAR(BasicBlock, [7, 7, 7], num_classes)
+def resnet44_cifar(num_classes, project=False, projection_dim=None):
+    return ResNetCIFAR(BasicBlock, [7, 7, 7], num_classes, project, projection_dim)
 
 
-def resnet56_cifar(num_classes):
-    return ResNetCIFAR(BasicBlock, [9, 9, 9], num_classes)
+def resnet56_cifar(num_classes, project=False, projection_dim=None):
+    return ResNetCIFAR(BasicBlock, [9, 9, 9], num_classes, project, projection_dim)
 
 
-def resnet110_cifar(num_classes):
-    return ResNetCIFAR(BasicBlock, [18, 18, 18], num_classes)
+def resnet110_cifar(num_classes, project=False, projection_dim=None):
+    return ResNetCIFAR(BasicBlock, [18, 18, 18], num_classes, project, projection_dim)
 
 
-def resnet1202_cifar(num_classes):
-    return ResNetCIFAR(BasicBlock, [200, 200, 200], num_classes)
+def resnet1202_cifar(num_classes, project=False, projection_dim=None):
+    return ResNetCIFAR(BasicBlock, [200, 200, 200], num_classes, project, projection_dim)
