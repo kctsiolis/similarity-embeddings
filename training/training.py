@@ -21,10 +21,10 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
-from logger import Logger
+from training.logger import Logger
 import time
 
-from distillers import SimilarityDistiller, KD, WeightedDistiller
+from training.distillers import SimilarityDistiller, KD, WeightedDistiller
 
 class Trainer():
 

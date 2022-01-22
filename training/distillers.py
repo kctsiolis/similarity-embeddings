@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from data_augmentation import SimCLRTransform
+from training.data_augmentation import SimCLRTransform
 import math
 
 def get_similarity(model, data):

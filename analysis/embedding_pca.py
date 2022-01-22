@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from sklearn.decomposition import PCA
-from embeddings import load_embeddings, normalize_embeddings
+from analysis.embeddings import load_embeddings, normalize_embeddings
 
 def get_args(parser):
     parser.add_argument('-n', dest='num_components', type=int, help='Number of principal components.',

@@ -1,7 +1,7 @@
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import numpy as np
-from embeddings import load_embeddings, save_embeddings
+from analysis.embeddings import load_embeddings, save_embeddings
 
 def tsne(embs, labels, save_path, num_classes=None, plots_path=None):
     t = TSNE(verbose= 1,n_jobs = -1)

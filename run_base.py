@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from loaders import get_loader
+from training.loaders import get_loader
 
 def get_base_args(parser):
     """Collect command line arguments common to all runners."""

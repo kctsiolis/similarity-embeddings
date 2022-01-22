@@ -1,8 +1,8 @@
 from run_base import get_base_args, run_base
-from models import get_model
+from models.models import get_model
 import argparse
-from logger import Logger
-from training import SupervisedTrainer
+from training.logger import Logger
+from training.training import SupervisedTrainer
 
 def get_teacher_args(parser):
     parser.add_argument('--model-path', type=str,

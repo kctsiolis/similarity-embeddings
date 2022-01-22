@@ -3,8 +3,8 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from resnet import resnet18, resnet34, resnet50, resnet101, resnet152
-from resnet_cifar import resnet20_cifar, resnet32_cifar, resnet44_cifar, resnet56_cifar
+from models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
+from models.resnet_cifar import resnet20_cifar, resnet32_cifar, resnet44_cifar, resnet56_cifar
 
 def get_model(model_str: str, load_path: str = None, 
     num_classes: int = 10, project: bool = False, projection_dim: int = None) -> nn.Module:

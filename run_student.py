@@ -1,7 +1,7 @@
 from run_base import get_base_args, run_base
-from models import get_model
-from training import DistillationTrainer
-from logger import Logger
+from models.models import get_model
+from training.training import DistillationTrainer
+from training.logger import Logger
 import argparse
 
 def get_student_args(parser):
