@@ -3,7 +3,7 @@
 
 import argparse
 import numpy as np
-from compare_kernels import load_matrix, compute_kernel, compute_distance, l2_normalization
+from analysis.compare_kernels import load_matrix, compute_kernel, compute_distance, l2_normalization
 
 def get_args(parser):
     parser.add_argument('-w', dest='w', help='.npy file containing matrix.')

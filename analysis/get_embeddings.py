@@ -10,11 +10,11 @@ import numpy as np
 import yaml
 
 
-from training import predict
-from models import get_model
-from loaders import dataset_loader
+from training.training import predict
+from models.models import get_model
+from training.loaders import dataset_loader
 from log_file_utils import rename_models
-from training import get_embeddings
+from training.training import get_embeddings
 
 try:
     config = open('../config.yaml', 'r')

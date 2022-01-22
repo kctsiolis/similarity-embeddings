@@ -15,12 +15,11 @@ class ResNet18(nn.Module):
         dim: Dimension of the last embedding layer
 
     """
-    def __init__(self, num_classes=10, one_channel=False, pretrained=False):
+    def __init__(self, num_classes, pretrained=False):
         """Instantiate object of class ResNet18.
         
         Args:
             num_classes: Number of classes (for applying model to classification task).
-            one_channel: Whether or not input data has one colour channel (for MNIST).
             pretrained: Whether or not to get pretrained model from Torch.
 
         """
@@ -30,15 +29,9 @@ class ResNet18(nn.Module):
         else:
             self.model = resnet18(num_classes=num_classes)
         self.dim = 512
-        if one_channel:
-            #Set number of input channels to 1 (since MNIST images are greyscale)
-            self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
 
     def forward(self, x):
         return self.model(x)
-
-    def get_dim(self):
-        return self.dim
 
 class ResNet50(nn.Module):
     """Wrapper class for the ResNet50 model (imported from Torch).
@@ -48,12 +41,11 @@ class ResNet50(nn.Module):
         dim: Dimension of the last embedding layer
 
     """
-    def __init__(self, num_classes=10, one_channel=False, pretrained=False):
+    def __init__(self, num_classes, pretrained=False):
         """Instantiate object of class ResNet50.
         
         Args:
             num_classes: Number of classes (for applying model to classification task).
-            one_channel: Whether or not input data has one colour channel (for MNIST).
             pretrained: Whether or not to get pretrained model from Torch.
 
         """
@@ -63,15 +55,9 @@ class ResNet50(nn.Module):
         else:
             self.model = resnet50(num_classes=num_classes)
         self.dim = 2048
-        if one_channel:
-            #Set number of input channels to 1 (since MNIST images are greyscale)
-            self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
 
     def forward(self, x):
         return self.model(x)
-
-    def get_dim(self):
-        return self.dim
 
 class ResNet152(nn.Module):
     """Wrapper class for the ResNet152 model (imported from Torch).
@@ -81,12 +67,11 @@ class ResNet152(nn.Module):
         dim: Dimension of the last embedding layer
 
     """
-    def __init__(self, num_classes=10, one_channel=False, pretrained=False):
+    def __init__(self, num_classes, pretrained=False):
         """Instantiate object of class ResNet152.
         
         Args:
             num_classes: Number of classes (for applying model to classification task).
-            one_channel: Whether or not input data has one colour channel (for MNIST).
             pretrained: Whether or not to get pretrained model from Torch.
 
         """
@@ -96,16 +81,9 @@ class ResNet152(nn.Module):
         else:
             self.model = resnet152(num_classes=num_classes)
         self.dim = 2048
-        if one_channel:
-            #Set number of input channels to 1 (since MNIST images are greyscale)
-            self.model.conv1 = nn.Conv2d(1, 64, kernel_size=(7,7), stride=(2,2), padding=(3,3), bias=False)
 
     def forward(self, x):
         return self.model(x)
-
-    def get_dim(self):
-        return self.dim
-
 
 class Embedder(nn.Module):
     """Wrapper class for a feature embedder (model w/o classification layer).
@@ -115,36 +93,31 @@ class Embedder(nn.Module):
         dim: Embedding dimension.
 
     """
-    def __init__(self, model, dim=None, project=True):
+    def __init__(self, model, dim=None, project=False):
         """Instantiate object of class Embedder.
 
         Args:
             model: A model with a classification layer (which will be removed).
-            dim: The embedding dimension of the model.
+            dim: The desired projected embedding dimension.
 
         """
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
-        try:
-            self.features = nn.Sequential(*list(model.model.children())[:-1])
-        except AttributeError:
-            self.features = nn.Sequential(*list(model.children())[:-1])
-        
-        try:
+            
+        self.features = nn.Sequential(*list(model.children())[:-1])
+
+        if dim is None:
             self.dim = model.dim
-        except AttributeError:
-            if dim is None:
-                raise ValueError('Must specify the model embedding dimension.')
-            else:
-                self.dim = dim
+        else:
+            self.dim = dim
 
         self.project = project
         if project:
             self.projection = nn.Sequential(
-                nn.Linear(self.dim, 512),
+                nn.Linear(model.dim, self.dim),
                 nn.ReLU(),
-                nn.Linear(512, 128)
+                nn.Linear(self.dim, self.dim)
             )
                 
     def forward(self, x):
@@ -157,11 +130,22 @@ class Embedder(nn.Module):
     def get_dim(self):
         return self.dim
 
+    def student_mode(self):
+        for param in self.features.parameters():
+            param.requires_grad = True
+        for param in self.projection.parameters():
+            param.requires_grad = True
+
+    def teacher_mode(self):
+        for param in self.features.parameters():
+            param.requires_grad = False
+        self.project = False
+
 class EmbedderAndLogits(nn.Module):
     """
     Wrapper for model to return both embeddings and logits
     """
-    def __init__(self, model, dim=None):
+    def __init__(self, model):
         """Instantiate object .
 
         Args:
@@ -171,23 +155,11 @@ class EmbedderAndLogits(nn.Module):
         """
         super().__init__()
         #Get the embedding layers from the given model
-        #The attribute containing the model's layers may go by different names
-        try:            
-            self.features = nn.Sequential(*list(model.model.children())[:-1])
-            self.lc = list(model.model.children())[-1]            
-        except AttributeError:            
-            self.features = nn.Sequential(*list(model.children())[:-1])
-            self.lc = list(model.children())[-1]
+        #The attribute containing the model's layers may go by different names         
+        self.features = nn.Sequential(*list(model.children())[:-1])
+        self.lc = list(model.children())[-1]            
             
-
-        try:
-            # self.dim = model.dim
-            pass
-        except AttributeError:
-            if dim is None:
-                raise ValueError('Must specify the model embedding dimension.')
-            else:
-                self.dim = dim
+        self.dim = model.dim
                 
     def forward(self, x):
         x = self.features(x)
@@ -199,6 +171,10 @@ class EmbedderAndLogits(nn.Module):
 
     def get_dim(self):
         return self.dim        
+
+    def get_features(self):
+        return self.features
+
     def student_mode(self):
         for param in self.features.parameters():
             param.requires_grad = True
@@ -208,11 +184,7 @@ class EmbedderAndLogits(nn.Module):
     def teacher_mode(self):
         for param in self.features.parameters():
             param.requires_grad = False
-        for param in self.projection.parameters():
-            param.requires_grad = True
-
-    def get_features(self):
-        return self.features
+        self.project = False
 
 
 
@@ -224,41 +196,25 @@ class TruncatedNet(nn.Module):
         dim: Embedding dimension.
 
     """
-    def __init__(self, model,n, dim=None):
+    def __init__(self, model, n):
         """Instantiate object of class Embedder.
 
         Args:
             model: A model with a classification layer (which will be removed).
             n: number of layers to shave off
-            dim: The embedding dimension of the model.
         
         """
         super().__init__()
         #Get the embedding layers from the given model
         #The attribute containing the model's layers may go by different names
-        try:
-            self.features = nn.Sequential(*list(model.model.children())[:-n])
-        except AttributeError:
-            self.features = nn.Sequential(*list(model.children())[:-n])
-
+        self.features = nn.Sequential(*list(model.model.children())[:-n])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-
-        try:
-            self.dim = model.dim
-        except AttributeError:
-            if dim is None:
-                raise ValueError('Must specify the model embedding dimension.')
-            else:
-                self.dim = dim
                 
     def forward(self, x):
         x = self.features(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)    
-        return x
-
-    def get_dim(self):
-        return self.dim   
+        return x 
 
 class MLP(nn.Module):
     ''' A basic 3 layer MLP '''
@@ -287,18 +243,14 @@ class ConvNetEmbedder(nn.Module):
         dim: Embedding dimension.
 
     """
-    def __init__(self, one_channel=False):
+    def __init__(self):
         """Instantiate ConvNetEmbedder object.
         
         Args:
-            one_channel: Whether or not input has one colour channel (for MNIST).
 
         """
         super().__init__()
-        if one_channel:
-            self.conv1 = nn.Conv2d(1, 6, 5)
-        else:
-            self.conv1 = nn.Conv2d(3, 6, 5)
+        self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.dim = 16 * 6 * 5
@@ -333,7 +285,7 @@ class Classifier(nn.Module):
         linear_layer: The new linear layer on top of the embedder.
 
     """
-    def __init__(self, embedder, num_classes=10):
+    def __init__(self, embedder, num_classes):
         """Instantiate the classifier object.
         
         Args:
@@ -349,7 +301,6 @@ class Classifier(nn.Module):
             param.requires_grad = False
         #Classification layer
         self.linear_layer = nn.Linear(embedder.get_dim(), num_classes)
-        
 
     def forward(self, x):
         x = self.features(x)
@@ -370,8 +321,8 @@ class WrapWithProjection(nn.Module):
         return x
 
 def get_model(model_str: str, load: bool = False, load_path: str = None, 
-    one_channel: bool = False, num_classes: int = 10, get_embedder: bool = False, project_embedder: bool = False, truncate_model : bool = False,
-    truncation_level : int = -1, map_location = None) -> nn.Module:
+    num_classes: int = 10, get_embedder: bool = False, project_embedder: bool = False, 
+    projection_dim: int = None, truncate_model : bool = False, truncation_level : int = -1) -> nn.Module:
     """Instantiate or load a specified model.
     
     
@@ -379,16 +330,13 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model_str: String specifying the model.
         load: Set to true to load existing model, otherwise instantiate a new one.
         load_path: Path to load model from (if we are loading).
-        one_channel: Whether or not model sees only one colour channel.
         num_classes: Number of classes (if we are classifying).
         get_embedder: Whether or not to only get the feature embedding layers.
-        map_location: if 'load' the device to load the model onto
 
     Returns:
         The desired model.
     
     """    
-    checkpointing = False
 
     if get_embedder and truncate_model:
         raise ValueError('Cannot get embedder and truncate model')
@@ -399,45 +347,36 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = MLP(input_dim=32*32*3, num_classes=num_classes,hidden_dim=256)
         dim = 256    
     elif model_str == 'resnet18':
-        model = ResNet18(one_channel=one_channel, num_classes=num_classes)
+        model = ResNet18(num_classes=num_classes)
         dim = 512    
     elif model_str == 'resnet50':
-        model = ResNet50(one_channel=one_channel, num_classes=num_classes)
+        model = ResNet50(num_classes=num_classes)
         dim = 2048
     elif model_str == 'resnet152':
-        model = ResNet152(one_channel=one_channel, num_classes=num_classes)
+        model = ResNet152(num_classes=num_classes)
         dim = 2048
     elif model_str == 'resnet18_embedder':
-        model = Embedder(ResNet18(one_channel=one_channel, num_classes=num_classes),project=project_embedder)
+        model = Embedder(ResNet18(num_classes=num_classes),project=project_embedder, dim=projection_dim)
     elif model_str == 'resnet50_embedder':
-        model = Embedder(ResNet50(one_channel=one_channel, num_classes=num_classes),project=project_embedder)
+        model = Embedder(ResNet50(num_classes=num_classes),project=project_embedder, dim=projection_dim)
     elif model_str == 'resnet50_classifier':
-        model = Classifier(Embedder(ResNet50(one_channel=one_channel,
-            num_classes=num_classes)),num_classes=num_classes)        
+        model = Classifier(Embedder(ResNet50(num_classes=num_classes)),num_classes=num_classes)        
     elif model_str == 'resnet18_classifier':        
-        model = Classifier(Embedder(ResNet18(one_channel=one_channel,
-            num_classes=num_classes),project=project_embedder),num_classes=num_classes)        
+        model = Classifier(Embedder(ResNet18(num_classes=num_classes)),num_classes=num_classes)        
     elif model_str == 'convnet_embedder':
-        model = ConvNetEmbedder(one_channel=one_channel)
+        model = ConvNetEmbedder()
     elif model_str == 'resnet18_pretrained':
-        load = False
-        model = ResNet18(one_channel=one_channel, pretrained=True)
+        model = ResNet18(pretrained=True)
         dim = 512
     elif model_str == 'resnet18_pretrained_embedder':
-        load = False
-        model = Embedder(ResNet18(one_channel=one_channel, pretrained=True),dim=512,project=project_embedder)        
+        model = Embedder(ResNet18(pretrained=True),dim=512,project=project_embedder,dim=projection_dim)        
     elif model_str == 'resnet50_pretrained':
-        load = False
-        model = ResNet50(one_channel=one_channel, pretrained=True)
+        model = ResNet50(pretrained=True)
         dim = 2048
     elif model_str == 'resnet152_pretrained':
-        load = False
-        model = ResNet152(one_channel=one_channel, pretrained=True)
+        model = ResNet152(pretrained=True)
         dim = 2048
     elif model_str == 'simclr_pretrained':
-        assert load == True
-        checkpointing = True
-        checkpoint = torch.load(load_path)
         model = ResNet50(num_classes=1000)
         dim = 2048        
     elif model_str == 'resnet_small_cifar':
@@ -447,7 +386,8 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
         model = cifar_models.ResNet2Layer(num_classes=num_classes)
         dim = 128
     elif model_str == 'resnet_small_cifar_embedder':
-        model = Embedder(cifar_models.ResNet3Layer(num_classes=num_classes), dim=256,project=project_embedder)           
+        model = Embedder(
+            cifar_models.ResNet3Layer(num_classes=num_classes), dim=256, project=project_embedder)           
     elif model_str == 'resnet_very_small_cifar_embedder':
         model = Embedder(cifar_models.ResNet2Layer(num_classes=num_classes), dim=128,project=project_embedder)
     elif model_str == 'resnet_small_cifar_classifier':
@@ -480,14 +420,11 @@ def get_model(model_str: str, load: bool = False, load_path: str = None,
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
         
-    if load:
-        if checkpointing:
-            try:
-                model.model.load_state_dict(checkpoint['state_dict'])
-            except AttributeError:
-                model.load_state_dict(checkpoint['state_dict'])
-        else:                        
-            model.load_state_dict(torch.load(load_path,map_location=map_location))
+    if load_path is not None:
+        try:
+            model.load_state_dict(torch.load(load_path)['state_dict'])
+        except IndexError:
+            model.load_state_dict(torch.load(load_path))
     
     if truncate_model:             
         model = TruncatedNet(model,n=truncation_level,dim=dim)

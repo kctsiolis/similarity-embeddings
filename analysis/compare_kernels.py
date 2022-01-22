@@ -2,7 +2,7 @@
 
 import argparse
 import numpy as np
-from embeddings import load_embeddings, normalize_embeddings, compute_similarity_matrix
+from analysis.embeddings import load_embeddings, normalize_embeddings, compute_similarity_matrix
 
 def get_args(parser):
     parser.add_argument('--m1', dest='m1', help='.npy file containing first matrix.',

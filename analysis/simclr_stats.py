@@ -3,10 +3,10 @@ import torch
 from torchvision import transforms
 import numpy as np
 from tqdm import tqdm
-from loaders import dataset_loader
-from models import get_model
-from data_augmentation import make_augmentation
-from training import get_model_similarity
+from training.loaders import dataset_loader
+from models.models import get_model
+from training.data_augmentation import make_augmentation
+from training.training import get_model_similarity
 
 def get_args(parser):
     """Collect command line arguments."""

@@ -1,8 +1,8 @@
 import torch
 import numpy
 from sklearn import random_projection
-from models import get_model, WrapWithProjection
-from loaders import dataset_loader
+from models.models import get_model, WrapWithProjection
+from training.loaders import dataset_loader
 
 
 # Start with a teacher model / preferably trained with sim. based embedding to be more robust to projections

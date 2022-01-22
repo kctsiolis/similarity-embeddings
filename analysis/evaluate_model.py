@@ -19,9 +19,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sn
 from torch.utils import data
-from models import get_model
-from training import predict
-from loaders import dataset_loader
+from models.models import get_model
+from training.training import predict
+from training.loaders import dataset_loader
 
 
 def get_args(parser):

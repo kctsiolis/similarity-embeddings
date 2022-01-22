@@ -18,10 +18,10 @@ import numpy as np
 import torch
 from torch import nn
 from matplotlib import pyplot as plt
-from data_augmentation import Augmentation, make_augmentation
-from training import get_model_similarity
-from models import get_model
-from loaders import dataset_loader
+from training.data_augmentation import Augmentation, make_augmentation
+from training.training import get_model_similarity
+from models.models import get_model
+from training.loaders import dataset_loader
 
 def get_args(parser):
     parser.add_argument('--load-path', type=str,
