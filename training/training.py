@@ -22,6 +22,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 from training.logger import Logger
+from training.data_augmentation import SimCLRTransform
 import time
 
 from training.distillers import SimilarityDistiller, KD, WeightedDistiller
@@ -137,6 +138,10 @@ class Trainer():
                     if self.model_path is not None:
                         current_model_path = self.model_path
                         self.save_model(current_model_path, epoch)
+                        if self.logger.mode == 'clip_distillation':
+                            student_path = current_model_path.replace('model.pt','student.pt')
+                            torch.save(self.model.student.state_dict(),student_path)                                                        
+
 
             if self.sched_str == 'plateau':
                 self.scheduler.step(val_loss)
@@ -207,8 +212,8 @@ class SupervisedTrainer(Trainer):
         train_top5_acc = AverageMeter()
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
-            data, target = data.to(self.device), target.to(self.device)
-            self.optimizer.zero_grad()
+            data, target = data.to(self.device, non_blocking = True), target.to(self.device, non_blocking = True)
+            self.optimizer.zero_grad(set_to_none=True)
             output = self.model(data)
             loss = self.loss_function(output, target)
             top1_acc, top5_acc = compute_accuracy(output, target)
@@ -237,6 +242,74 @@ class SupervisedTrainer(Trainer):
             self.model, self.device, self.val_loader, self.loss_function)
 
 
+class CLIPDistillTrainer(Trainer):
+    def __init__(
+            self, model: nn.Module, train_loader: DataLoader, 
+            val_loader: DataLoader, device: torch.device, logger: Logger,
+            args: Namespace):
+        super().__init__(
+            model, train_loader, val_loader, device, logger, args)       
+        
+        self.augment = args.augmented_distillation 
+        if self.augment:
+            self.transform = SimCLRTransform()
+
+    def train_epoch(self, epoch):
+        self.model.student.train()
+        self.model.teacher.eval()
+        train_loss = AverageMeter()        
+        for batch_idx, (data, _) in enumerate(self.train_loader):                                                            
+            self.update_lr()
+            data = data.to(self.device, non_blocking = True)
+            if self.augment:
+                data = self.transform(data, num_views=2)
+                data = torch.cat(data, dim=0)                
+            
+            self.optimizer.zero_grad(set_to_none=True)            
+            teacher_logits, student_logits = self.model(data)
+            loss = self.compute_loss(teacher_logits, student_logits)            
+            train_loss.update(loss.item())
+            loss.backward()
+            self.optimizer.step()                       
+            
+            if batch_idx % self.log_interval == 0:
+                logged_loss = train_loss.get_avg()
+                self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
+                self.logged_train_losses.append(logged_loss)
+                log_str = 'Train Epoch {} [{}/{} ({:.0f}%)]\tLoss: {:6f}'.format(
+                    epoch, batch_idx * len(data), int(len(self.train_loader.dataset)),
+                    100. * batch_idx / len(self.train_loader), logged_loss)
+                self.logger.log(log_str)
+            if batch_idx % self.plot_interval == 0 and self.logger.save:
+                train_loss_plot(
+                    self.iters, self.logged_train_losses, self.plots_dir)
+            self.itr += 1
+
+        return train_loss.get_avg(), None, None
+
+    def validate(self):
+        self.model.eval()        
+        loss = 0
+        with torch.no_grad():
+            for data, _ in self.val_loader:
+                data = data.to(self.device, non_blocking = True)
+                teacher_logits, student_logits = self.model(data)
+                loss += self.compute_loss(teacher_logits, student_logits).item()                                
+
+        loss = loss / len(self.val_loader)
+
+        return loss, None, None
+
+    def compute_loss(self, teacher_logits,student_logits):            
+        targets = torch.arange(teacher_logits.shape[0], device = self.device)
+        ce_teacher = F.cross_entropy(teacher_logits,targets)
+        ce_student = F.cross_entropy(student_logits,targets)    
+        
+        return (ce_teacher + ce_student) / 2
+
+
+
+
 class DistillationTrainer(Trainer):
     def __init__(
             self, model: nn.Module, teacher: nn.Module, train_loader: DataLoader, 
@@ -262,9 +335,9 @@ class DistillationTrainer(Trainer):
         train_loss = AverageMeter()        
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
-            data = data.to(self.device)
-            target = target.to(self.device)
-            self.optimizer.zero_grad()            
+            data = data.to(self.device, non_blocking = True)
+            target = target.to(self.device, non_blocking = True)
+            self.optimizer.zero_grad(set_to_none=True)            
             loss = self.distiller.compute_loss(self.student, self.teacher, data, target)
             train_loss.update(loss.item())
             loss.backward()
@@ -291,8 +364,8 @@ class DistillationTrainer(Trainer):
         loss = 0
         with torch.no_grad():
             for data, target in self.val_loader:
-                data = data.to(self.device)
-                target = target.to(self.device)
+                data = data.to(self.device, non_blocking = True)
+                target = target.to(self.device, non_blocking = True)
                 loss += self.distiller.compute_loss(self.student, self.teacher, data, target).item()
 
         loss = loss / len(self.val_loader)
@@ -300,8 +373,7 @@ class DistillationTrainer(Trainer):
         return loss, None, None
 
 def predict(model: nn.Module, device: torch.device, 
-    loader: torch.utils.data.DataLoader, loss_function: nn.Module, 
-    precision: str = '32', calculate_confusion: bool = False) -> tuple([float, float]):
+    loader: torch.utils.data.DataLoader, loss_function: nn.Module) -> tuple([float, float]):
     """Evaluate supervised model on data.
 
     Args:
@@ -316,40 +388,24 @@ def predict(model: nn.Module, device: torch.device,
     
     """
     model.eval()     
-    model = to_precision(model,precision)   
     
 
     loss = 0
     acc1 = 0
     acc5 = 0
-    confusion = []
     with torch.no_grad():
-        for data, target in loader:
-            if precision == 'autocast':
-                with torch.cuda.amp.autocast():
-                    data, target = data.to(device),target.to(device)
-                    output = model(data)                                
-                    loss += loss_function(output, target).item()
-            else:
-                data, target = to_precision(data.to(device),precision),target.to(device)
-                output = model(data)         
-                loss += loss_function(output, target).item()
+        for data, target in loader:            
+            data, target = data.to(device, non_blocking = True), target.to(device, non_blocking = True)
+            output = model(data)         
+            loss += loss_function(output, target).item()
 
-
-            if calculate_confusion:
-                confusion.append(compute_confusion(output,target))                
-            
             cur_acc1, cur_acc5 = compute_accuracy(output, target)
             acc1 += cur_acc1
             acc5 += cur_acc5
     
     loss, acc1, acc5 = loss / len(loader), acc1 / len(loader), acc5 / len(loader)
-    
-    if calculate_confusion:                
-        confusion = np.mean(np.stack(confusion),axis = 0)        
-        return loss, acc1, acc5, confusion.round(2)
-    else:
-        return loss, acc1, acc5
+   
+    return loss, acc1, acc5
 
 
 def to_precision(object,precision):
@@ -417,8 +473,8 @@ def get_embeddings(model: nn.Module, device: torch.device,
 
     with torch.no_grad():
         for data, target in loader:
-            data = data.to(device)
-            embs = model(data)
+            data = data.to(device, non_blocking = True)
+            embs = model(data, non_blocking = True)
             embeddings = np.concatenate((embeddings, embs.cpu().numpy()))
             labels = np.concatenate((labels, target))
 

@@ -196,7 +196,7 @@ def cifar_loader(args, cifar10 : bool = True
         test_set = datasets.CIFAR100(root='./data', train=False,
             download=True, transform=test_transforms)
         num_classes = 100
-    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers = 8)
 
     train_loader = DataLoader(
         train_transformed, batch_size=args.batch_size, num_workers=8,

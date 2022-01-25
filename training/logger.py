@@ -50,6 +50,8 @@ class Logger:
             self.model_str = args.student_model
         elif mode == 'linear_classifier':
             self.model_str = args.model
+        elif mode == 'clip_distillation':
+            self.model_str = args.student_model
         self.verbose = verbose
         self.save = not args.no_save
         if self.save:
@@ -79,10 +81,8 @@ class Logger:
         self.log('Experiment Time: {}'.format(datetime.now()))
         self.log('Mode: {}'.format(self.mode))
         self.log('Dataset: {}'.format(args.dataset))
-        if self.mode == 'distillation':
-            self.log('Distillation Type: {}'.format(args.distillation_loss))
-            if args.distillation_loss == 'kd':
-                self.log('c: {}'.format(args.c))
+        if self.mode == 'clip_distill':
+            self.log('CLIP Distillation')            
         self.log('Batch Size: {}'.format(args.batch_size))
         self.log('Learning Rate : {}'.format(args.lr))
         self.log('Optimizer: {}'.format(args.optimizer))

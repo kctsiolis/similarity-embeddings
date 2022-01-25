@@ -26,7 +26,7 @@ def get_base_args(parser):
                         help='Fraction of training set to train on (default: 1.0).')
     parser.add_argument('--lr-warmup-iters', type=int, default=0,
                         help='Number of iterations (batches) over which to perform learning rate warmup (default: 0).')
-    parser.add_argument('--early-stop', type=int, default=10, metavar='E',
+    parser.add_argument('--early-stop', type=int, default=50, metavar='E',
                         help='Number of epochs for early stopping')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='Frequency of loss logging in terms of number of iterations (default: 10).')

@@ -325,10 +325,10 @@ class ResNet(nn.Module):
             param.requires_grad = False
         self.classify = False
 
-    def teacher_mode(self):
+    def teacher_mode(self, classify : bool):
         for param in self.parameters():
             param.requires_grad = False
-        self.classify = False
+        self.classify = classify
 
     def probing_mode(self):
         for param in self.parameters():
