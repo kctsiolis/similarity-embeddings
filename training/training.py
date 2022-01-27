@@ -306,7 +306,10 @@ class CLIPDistillTrainer(Trainer):
         ce_student = F.cross_entropy(student_logits,targets)    
         
         return (ce_teacher + ce_student) / 2
-
+        # targets = torch.arange(teacher_logits.shape[0], device = self.device)        
+        # ce_student = F.cross_entropy(student_logits,targets)    
+        
+        return ce_student
 
 
 

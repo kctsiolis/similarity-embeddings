@@ -79,29 +79,10 @@ class Logger:
 
         """
         self.log('Experiment Time: {}'.format(datetime.now()))
-        self.log('Mode: {}'.format(self.mode))
-        self.log('Dataset: {}'.format(args.dataset))
-        if self.mode == 'clip_distill':
-            self.log('CLIP Distillation')            
-        self.log('Batch Size: {}'.format(args.batch_size))
-        self.log('Learning Rate : {}'.format(args.lr))
-        self.log('Optimizer: {}'.format(args.optimizer))
-        self.log('Scheduler: {}'.format(args.scheduler))
-        self.log('Learning Rate Warmup Iters: {}'.format(args.lr_warmup_iters))
-        self.log('Training Set Fraction: {}'.format(args.train_set_fraction))
-        self.log('Seed: {}'.format(args.seed))
-        self.log('Max Epochs: {}'.format(args.epochs))
-        if args.scheduler == 'plateau':
-            self.log('Scheduler Patience: {}'.format(args.plateau_patience))
-        self.log('Early Stopping Patience: {}'.format(args.early_stop))
-        self.log('Model: {}'.format(self.model_str))
-        if self.mode == 'distillation':
-            self.log('Teacher Model: {}'.format(args.teacher_model))
-            self.log('Teacher Path: {}'.format(args.teacher_path))
-            self.log('Student Path: {}'.format(args.student_path))   
-            self.log('Margin: {}'.format(args.margin))
-            if args.margin:
-                self.log('Margin Value: {}'.format(args.margin_value))  
+        
+        for p in vars(args).items():
+            self.log(f' {p[0]}: {p[1]}')
+        self.log('\n')
 
     def log(self, string: str) -> None:
         """Write a string to the log.

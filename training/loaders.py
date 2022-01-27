@@ -1,5 +1,6 @@
 """Code to load the MNIST, CIFAR-10, and ImageNet datasets."""
 
+from multiprocessing.sharedctypes import Value
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data.distributed import DistributedSampler
@@ -30,8 +31,10 @@ def get_loader(args) -> tuple([DataLoader, DataLoader]):
         return cifar_loader(args, cifar10 = False)
     elif args.dataset == 'tiny_imagenet':
         return tiny_imagenet_loader(args)
-    else:
+    elif args.dataset == 'imagenet':        
         return imagenet_loader(args)
+    else:
+        raise ValueError(f'Dataset {args.dataset} is not available')
 
 def imagenet_loader(args) -> tuple([DataLoader, DataLoader]):
     """Loader for the ImageNet dataset.

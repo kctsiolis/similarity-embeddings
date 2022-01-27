@@ -76,7 +76,7 @@ def get_model_embedding_dim(model_str: str) -> int:
     elif model_str == 'resnet20_cifar':
         dim = 512
     elif model_str == 'resnet32_cifar':
-        dim = 512
+        dim = 64
     elif model_str == 'resnet44_cifar':
         dim = 512
     elif model_str == 'resnet56_cifar':

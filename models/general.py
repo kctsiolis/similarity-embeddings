@@ -17,9 +17,11 @@ class CLIPDistill(nn.Module):
                  # student
                  student_dimension: int,
                  student_model: nn.Module,
+                 scale_logits: bool = True,
                  ):
         super().__init__()
 
+        self.scale_logits = scale_logits
         self.teacher = teacher_model
         for param in self.teacher.parameters():
             param.requires_grad = False
@@ -28,18 +30,18 @@ class CLIPDistill(nn.Module):
         self.student_projection = nn.Sequential(nn.Linear(student_dimension, student_dimension, bias=False), nn.ReLU(
         ), nn.Linear(student_dimension, student_dimension, bias=False))
 
-#         self.teacher_projection = nn.Parameter(torch.randn(teacher_dimension,embed_dim))
-
+        # self.teacher_projection = nn.Parameter(torch.randn(teacher_dimension,embed_dim))
         if teacher_dimension == student_dimension:
             self.register_buffer('teacher_projection',
                                  torch.eye(teacher_dimension))
         else:
             self.register_buffer('teacher_projection', torch.randn(
                 teacher_dimension, student_dimension))
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        if self.scale_logits:            
+            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
 
-    def student_encoding(self, x):        
+    def student_encoding(self, x):               
         return self.student_projection(self.student(x))
 
     def teacher_encoding(self, x):
@@ -59,8 +61,11 @@ class CLIPDistill(nn.Module):
         
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        student_logits = logit_scale * student_features @ teacher_features.t()
+        student_logits = student_features @ teacher_features.t()
+        if self.scale_logits:
+            logit_scale = self.logit_scale.exp()
+            student_logits = logit_scale * student_logits
+            
         teacher_logits = student_logits.t()
 
         # shape = [global_batch_size, global_batch_size]

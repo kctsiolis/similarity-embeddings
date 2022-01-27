@@ -75,7 +75,7 @@ class KD():
         if c < 0 or c > 1:
             raise ValueError('c must be in [0,1].')
         self.c = c
-        self.sup_term = nn.CrossEntropyLoss
+        self.sup_term = nn.CrossEntropyLoss()
         self.kd_term = nn.KLDivLoss(reduction='batchmean')
 
     def compute_loss(self, student, teacher, data, target):
@@ -84,7 +84,7 @@ class KD():
         teacher_probs = nn.Softmax(dim=1)(teacher(data))            
         loss = self.c * self.kd_term(model_probs, teacher_probs) + \
             (1-self.c) * self.sup_term(output, target)
-
+        
         return loss
 
 class WeightedDistiller():
@@ -94,5 +94,7 @@ class WeightedDistiller():
     def compute_loss(self, student, teacher, data, target):
         student_sims = get_similarity(student, data)
         teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data)
-        loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0] 
+        
+        loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0]**2 
+        
         return loss

@@ -313,8 +313,8 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         embs = torch.flatten(x, 1)
         if self.project:
-            embs = self.projection(x)
-        logits = self.fc(x)
+            embs = self.projection(embs)
+        logits = self.fc(embs)
 
         return embs, logits
 

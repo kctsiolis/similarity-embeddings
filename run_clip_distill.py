@@ -35,12 +35,11 @@ def main():
     parser = argparse.ArgumentParser(description='Training the student model.')
     args = get_args(parser)
 
-    train_loader, val_loader, _, device = run_base(args)
+    train_loader, val_loader, num_classes, device = run_base(args)
     logger = Logger('clip_distillation', args)
 
-    
-    student = get_model(args.student_model, load_path=args.student_path, project=args.project_embedder)    
-    teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder)    
+    student = get_model(args.student_model, load_path=args.student_path, project=args.project_embedder, num_classes= num_classes)    
+    teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder, num_classes= num_classes)    
     student.student_mode()
     teacher.teacher_mode(classify = False)
 

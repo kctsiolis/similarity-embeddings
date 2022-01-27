@@ -49,14 +49,14 @@ def main():
     parser = argparse.ArgumentParser(description='Training the student model.')
     args = get_args(parser)
 
-    train_loader, val_loader, _, device = run_base(args)
+    train_loader, val_loader, num_classes, device = run_base(args)
     logger = Logger('distillation', args)
 
-    
-    student = get_model(args.student_model, load_path=args.student_path, project=args.project_embedder)
+    student = get_model(args.student_model, load_path=args.student_path, project=args.project_embedder, num_classes = num_classes)
     if args.distillation_loss != 'kd':
         student.student_mode()
-    teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder)
+    
+    teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder, num_classes = num_classes)
     classify = args.distillation_loss == 'kd'
     teacher.teacher_mode(classify)
 

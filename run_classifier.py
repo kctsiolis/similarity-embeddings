@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description='Training the teacher model.')
     args = get_args(parser)
 
+
     train_loader, val_loader, num_classes, device = run_base(args)
     logger = Logger('linear_classifier', args)
     model = get_model(args.model, args.model_path, num_classes=num_classes)
