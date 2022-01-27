@@ -46,6 +46,13 @@ def imagenet_loader(args) -> tuple([DataLoader, DataLoader]):
         Training and validation set loaders.
 
     """
+
+    if args.train_subset_indices_path is not None:
+        with open(args.train_subset_indices_path, 'r+') as file:
+            lines = file.readlines()
+            indices = [int(x.strip()) for x in lines]
+
+
     traindir = os.path.join(imagenet_path, 'train')
     valdir = os.path.join(imagenet_path, 'val')
 
@@ -92,6 +99,12 @@ def tiny_imagenet_loader(args) -> tuple([DataLoader, DataLoader]):
         Training and validation set loaders.
 
     """
+    
+    if args.train_subset_indices_path is not None:
+        with open(args.train_subset_indices_path, 'r+') as file:
+            lines = file.readlines()
+            indices = [int(x.strip()) for x in lines]
+
     traindir = os.path.join(tiny_imagenet_path, 'train')
     valdir = os.path.join(tiny_imagenet_path, 'val')
 
@@ -168,6 +181,11 @@ def cifar_loader(args, cifar10 : bool = True
         Training and validation set loaders.
 
     """
+    if args.train_subset_indices_path is not None:
+        with open(args.train_subset_indices_path, 'r+') as file:
+            lines = file.readlines()
+            indices = [int(x.strip()) for x in lines]
+
     if cifar10:
         train_set = datasets.CIFAR10(root='./data', train=True,
             download=True)
@@ -200,6 +218,9 @@ def cifar_loader(args, cifar10 : bool = True
             download=True, transform=test_transforms)
         num_classes = 100
 
+
+    if args.train_subset_indices_path is not None:
+        train_transformed = torch.utils.data.Subset(train_transformed, indices)
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers = 8, pin_memory= True)
     train_loader = DataLoader(
         train_transformed, batch_size=args.batch_size, num_workers=8,

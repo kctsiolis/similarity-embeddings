@@ -46,8 +46,11 @@ def get_margin_similarity(model, data, target, margin_value):
     # print(student_sims)
     return (torch.mul(sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)  
 
-def get_weighted_similarity(model, data):
-    embs, logits = model.embs_and_logits(data)
+def get_weighted_similarity(model, data, teacher_temp):    
+    
+    embs, logits = model.embs_and_logits(data)    
+    if teacher_temp is not None:
+        logits = logits / teacher_temp
     probits = torch.max(F.softmax(logits,dim = 1),dim=1).values        
     confidence = probits * probits[:,None]        
     embs = F.normalize(embs, p=2, dim=1)
@@ -88,12 +91,12 @@ class KD():
         return loss
 
 class WeightedDistiller():
-    def __init__(self):
-        pass
+    def __init__(self, teacher_temp = None):
+        self.teacher_temp = teacher_temp
 
     def compute_loss(self, student, teacher, data, target):
         student_sims = get_similarity(student, data)
-        teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data)
+        teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data, self.teacher_temp)
         
         loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0]**2 
         

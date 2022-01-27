@@ -11,6 +11,7 @@ def get_student_args(parser):
                         help='Path to the student model (if loading from checkpoint).')
     parser.add_argument('--teacher-model', type=str, default=None,
                         help='Choice of teacher model.')
+    parser.add_argument('--teacher-temp', type=float, default=None, help = 'Optimal temperature for calibration')                                    
     parser.add_argument('--student-model', type=str,
                         help='Choice of student model.')
     parser.add_argument('--project-embedder', action='store_true',

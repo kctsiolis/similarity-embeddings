@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import numpy as np                                    
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LambdaLR
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 from training.logger import Logger
@@ -61,6 +61,9 @@ class Trainer():
             self.change_epochs = []
         elif self.sched_str == 'cosine':
             self.scheduler = CosineAnnealingLR(self.optimizer, T_max=200)
+            self.change_epochs = None
+        elif self.sched_str == 'exponential':
+            self.scheduler = LambdaLR(self.optimizer, lr_lambda = lambda x :1e-5 + (1e-2 - 1e-5) * x * 195 ,verbose = True)
             self.change_epochs = None
 
         self.early_stop = args.early_stop
@@ -222,6 +225,7 @@ class SupervisedTrainer(Trainer):
             train_top5_acc.update(top5_acc)
             loss.backward()
             self.optimizer.step()
+            
             if batch_idx % self.log_interval == 0:
                 logged_loss = train_loss.get_avg()
                 self.iters.append((epoch-1) + batch_idx / len(self.train_loader))
@@ -233,7 +237,7 @@ class SupervisedTrainer(Trainer):
             if batch_idx % self.plot_interval == 0 and self.logger.save:
                 train_loss_plot(
                     self.iters, self.logged_train_losses, self.plots_dir)
-            self.itr += 1
+            self.itr += 1           
 
         return train_loss.get_avg(), train_top1_acc.get_avg(), train_top5_acc.get_avg()
 
@@ -328,7 +332,7 @@ class DistillationTrainer(Trainer):
         if self.loss_type == 'similarity-based':
             self.distiller = SimilarityDistiller(args.augmented_distillation)
         elif self.loss_type == 'similarity-weighted':
-            self.distiller = WeightedDistiller()
+            self.distiller = WeightedDistiller(args.teacher_temp)
         else:
             self.distiller = KD(args.c)
 
@@ -358,6 +362,7 @@ class DistillationTrainer(Trainer):
                     self.iters, self.logged_train_losses, self.plots_dir)
             self.itr += 1
         
+            # self.scheduler.step()            
         
         return train_loss.get_avg(), None, None
 
@@ -467,7 +472,7 @@ def get_embeddings(model: nn.Module, device: torch.device,
     Returns:
         The embeddings and labels for all instances in the data.
     
-    """
+    """    
     model.to(device)
     model.eval()
 
@@ -476,8 +481,8 @@ def get_embeddings(model: nn.Module, device: torch.device,
 
     with torch.no_grad():
         for data, target in loader:
-            data = data.to(device, non_blocking = True)
-            embs = model(data, non_blocking = True)
+            data = data.to(device)            
+            embs = model(data)
             embeddings = np.concatenate((embeddings, embs.cpu().numpy()))
             labels = np.concatenate((labels, target))
 

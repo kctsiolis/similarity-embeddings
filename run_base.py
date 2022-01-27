@@ -16,7 +16,7 @@ def get_base_args(parser):
                         help='learning rate (default: 0.1)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
                         help='Choice of optimizer for training (default: sgd).')
-    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine'], default='cosine',
+    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine', 'exponential'], default='cosine',
                         help='Choice of scheduler for training.')
     parser.add_argument('--plateau-patience', type=int, default=5,
                         help='Patience used in Plateau scheduler.')
@@ -35,7 +35,9 @@ def get_base_args(parser):
     parser.add_argument('--plot-interval', type=int,
                         help='Number of iterations between updates of loss plot.')                                         
     parser.add_argument('--no-save', action='store_true',
-                        help='Don\'t save the log, plots, and model from this run.')                                                
+                        help='Don\'t save the log, plots, and model from this run.')    
+    parser.add_argument('--train-subset-indices-path', type = str)
+                        
 
     return parser
 

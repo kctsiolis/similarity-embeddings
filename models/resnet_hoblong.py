@@ -127,7 +127,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, num_filters[3], n, stride=2)
         self.avgpool = nn.AvgPool2d(8)
         self.fc = nn.Linear(num_filters[3] * block.expansion, num_classes)
-        self.classify = True
+        self.classify = True        
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -273,8 +273,8 @@ def resnet44(**kwargs):
 def resnet56_hoblong(num_classes, project=False, projection_dim=None):
     if project:
         raise ValueError('Projection not possible with Hobbit Long models')
-
-    return ResNet(56, [16, 16, 32, 64], 'basicblock', num_classes=num_classes)
+        
+    return  ResNet(56, [16, 16, 32, 64], 'basicblock', num_classes=num_classes) 
 
 
 def resnet110_hoblong(num_classes, project=False, projection_dim=None):

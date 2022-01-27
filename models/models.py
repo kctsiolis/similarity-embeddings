@@ -51,13 +51,11 @@ def get_model(model_str: str, load_path: str = None,
     if load_path is not None:
         try:
             model.load_state_dict(torch.load(load_path)['model_state_dict'])
-        except KeyError:
-            pass
-
-        try:
-            model.load_state_dict(torch.load(load_path)['model'])
-        except KeyError:
-            model.load_state_dict(torch.load(load_path))
+        except KeyError:        
+            try:
+                model.load_state_dict(torch.load(load_path)['model'])
+            except KeyError:
+                model.load_state_dict(torch.load(load_path))
 
 
     return model
