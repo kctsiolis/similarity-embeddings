@@ -5,6 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
 from models.resnet_cifar import resnet20_cifar, resnet32_cifar, resnet44_cifar, resnet56_cifar
+from models.resnet_hoblong import resnet56_hoblong, resnet110_hoblong
 from models.general import CLIPDistill
 
 
@@ -39,7 +40,11 @@ def get_model(model_str: str, load_path: str = None,
     elif model_str == 'resnet56_cifar':
         model = resnet56_cifar(num_classes, project, projection_dim)
     elif model_str == 'clip_distill':
-        model = resnet56_cifar(num_classes, project, projection_dim)
+        model = resnet56_cifar(num_classes, project, projection_dim)    
+    elif model_str == 'resnet56_hoblong':
+        model = resnet56_hoblong(num_classes, project, projection_dim)
+    elif model_str == 'resnet110_hoblong':
+        model = resnet110_hoblong(num_classes, project, projection_dim)    
     else:
         raise ValueError('Model {} not defined.'.format(model_str))
 
@@ -47,7 +52,13 @@ def get_model(model_str: str, load_path: str = None,
         try:
             model.load_state_dict(torch.load(load_path)['model_state_dict'])
         except KeyError:
+            pass
+
+        try:
+            model.load_state_dict(torch.load(load_path)['model'])
+        except KeyError:
             model.load_state_dict(torch.load(load_path))
+
 
     return model
 
