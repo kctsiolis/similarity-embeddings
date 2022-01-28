@@ -12,7 +12,7 @@ def get_base_args(parser):
                         help='Batch size (default: 64)')
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 50)')
-    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
+    parser.add_argument('--lr', type=float, default=0.05, metavar='LR',
                         help='learning rate (default: 0.1)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
                         help='Choice of optimizer for training (default: sgd).')
