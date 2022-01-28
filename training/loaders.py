@@ -26,9 +26,9 @@ def get_loader(args) -> tuple([DataLoader, DataLoader]):
 
     """
     if args.dataset == 'cifar10':
-        return cifar_loader(args, cifar10 = True)
+        return cifar10_loader(args)
     elif args.dataset == 'cifar100':
-        return cifar_loader(args, cifar10 = False)
+        return cifar100_loader(args)
     elif args.dataset == 'tiny_imagenet':
         return tiny_imagenet_loader(args)
     elif args.dataset == 'imagenet':        
@@ -167,8 +167,7 @@ class TransformedDataset(Dataset):
         return len(self.dataset)
 
 
-def cifar_loader(args, cifar10 : bool = True
-    ) -> tuple([DataLoader, DataLoader]):
+def cifar10_loader(args) -> tuple([DataLoader, DataLoader]):
     """Load the CIFAR-10 training set and split into training and validation.
 
     Based on https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
@@ -186,12 +185,10 @@ def cifar_loader(args, cifar10 : bool = True
             lines = file.readlines()
             indices = [int(x.strip()) for x in lines]
 
-    if cifar10:
-        train_set = datasets.CIFAR10(root='./data', train=True,
-            download=True)
-    else:
-        train_set = datasets.CIFAR100(root='./data', train=True,
-            download=True)
+
+    train_set = datasets.CIFAR10(root='./data', train=True,
+        download=True)
+
     train_set_size = int(args.train_set_fraction * 50000)
 
     train_transforms = transforms.Compose([
@@ -209,15 +206,11 @@ def cifar_loader(args, cifar10 : bool = True
     train_subset, _ = torch.utils.data.random_split(
         train_set, [train_set_size, 50000-train_set_size])
     train_transformed = TransformedDataset(train_subset, train_transforms)
-    if cifar10:
-        test_set = datasets.CIFAR10(root='./data', train=False,
-            download=True, transform=test_transforms)
-        num_classes = 10
-    else:
-        test_set = datasets.CIFAR100(root='./data', train=False,
-            download=True, transform=test_transforms)
-        num_classes = 100
 
+
+    test_set = datasets.CIFAR10(root='./data', train=False,
+        download=True, transform=test_transforms)
+    num_classes = 10
 
     if args.train_subset_indices_path is not None:
         train_transformed = torch.utils.data.Subset(train_transformed, indices)
@@ -227,3 +220,53 @@ def cifar_loader(args, cifar10 : bool = True
         pin_memory=True)
 
     return train_loader, test_loader, num_classes
+
+def cifar100_loader(args) -> tuple([DataLoader, DataLoader]):
+    """Load the CIFAR-100 training set and split into training and validation.
+
+    Based on https://github.com/kuangliu/pytorch-cifar/blob/master/main.py
+    
+    Args:
+        args: Command line arguments.        
+
+    Returns:
+        Training and validation set loaders.
+
+    """
+    if args.train_subset_indices_path is not None:
+        with open(args.train_subset_indices_path, 'r+') as file:
+            lines = file.readlines()
+            indices = [int(x.strip()) for x in lines]
+    
+    train_set = datasets.CIFAR100(root='./data', train=True,
+        download=True)
+    train_set_size = int(args.train_set_fraction * 50000)
+
+    train_transforms = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
+            ])
+
+    test_transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
+            ])
+
+    train_subset, _ = torch.utils.data.random_split(
+        train_set, [train_set_size, 50000-train_set_size])
+    train_transformed = TransformedDataset(train_subset, train_transforms)
+
+    test_set = datasets.CIFAR100(root='./data', train=False,
+        download=True, transform=test_transforms)
+    num_classes = 100
+
+    if args.train_subset_indices_path is not None:
+        train_transformed = torch.utils.data.Subset(train_transformed, indices)
+    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers = 8, pin_memory= True)
+    train_loader = DataLoader(
+        train_transformed, batch_size=args.batch_size, num_workers=8,
+        pin_memory=True)
+
+    return train_loader, test_loader, num_classes    
