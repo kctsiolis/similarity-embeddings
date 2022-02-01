@@ -10,6 +10,8 @@ def get_base_args(parser):
                         help='Specify device to train on.')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='Batch size (default: 64)')
+    parser.add_argument('--positive-pair-sample', action='store_true', help='Sample more positive pairs')                        
+    parser.add_argument('--classes-each-batch', type=int, default=5)
     parser.add_argument('--epochs', type=int, default=50, metavar='N',
                         help='number of epochs to train (default: 50)')
     parser.add_argument('--lr', type=float, default=0.05, metavar='LR',

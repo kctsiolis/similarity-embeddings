@@ -2,6 +2,7 @@
 
 from multiprocessing.sharedctypes import Value
 import torch
+import numpy as np
 from torchvision import datasets, transforms
 from torch.utils.data.distributed import DistributedSampler
 import os
@@ -9,6 +10,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.datasets as datasets
 import yaml
+
 
 config = open('config.yaml', 'r')
 parsed_config = yaml.load(config, Loader=yaml.FullLoader)
@@ -123,9 +125,11 @@ def tiny_imagenet_loader(args) -> tuple([DataLoader, DataLoader]):
     train_subset, _ = torch.utils.data.random_split(
             train_dataset, [train_set_size, 100000-train_set_size])
 
-    train_loader = DataLoader(
-        train_subset, batch_size=args.batch_size, shuffle=True,
-        num_workers=10, pin_memory=True)
+    if args.positive_pair_sample:
+        sampler = PositivePairSampler(train_subset,targets = train_subset.dataset.targets,batch_size=args.batch_size, classes_each_batch=args.classes_each_batch)
+        train_loader = DataLoader(train_subset, num_workers=8, pin_memory=True, batch_sampler= sampler)
+    else:
+        train_loader = DataLoader(train_subset, batch_size=args.batch_size, num_workers=8, pin_memory=True)
 
     val_loader = DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
@@ -205,6 +209,7 @@ def cifar10_loader(args) -> tuple([DataLoader, DataLoader]):
 
     train_subset, _ = torch.utils.data.random_split(
         train_set, [train_set_size, 50000-train_set_size])
+    train_subset.indices.sort()
     train_transformed = TransformedDataset(train_subset, train_transforms)
 
 
@@ -215,9 +220,13 @@ def cifar10_loader(args) -> tuple([DataLoader, DataLoader]):
     if args.train_subset_indices_path is not None:
         train_transformed = torch.utils.data.Subset(train_transformed, indices)
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers = 8, pin_memory= True)
-    train_loader = DataLoader(
-        train_transformed, batch_size=args.batch_size, num_workers=8,
-        pin_memory=True)
+    
+    
+    if args.positive_pair_sample:
+        sampler = PositivePairSampler(train_transformed,targets = train_transformed.dataset.dataset.targets,batch_size=args.batch_size, classes_each_batch=args.classes_each_batch)
+        train_loader = DataLoader(train_transformed, num_workers=8, pin_memory=True, batch_sampler= sampler)
+    else:
+        train_loader = DataLoader(train_transformed, batch_size=args.batch_size, num_workers=8, pin_memory=True)
 
     return train_loader, test_loader, num_classes
 
@@ -256,6 +265,8 @@ def cifar100_loader(args) -> tuple([DataLoader, DataLoader]):
 
     train_subset, _ = torch.utils.data.random_split(
         train_set, [train_set_size, 50000-train_set_size])
+    train_subset.indices.sort()
+    
     train_transformed = TransformedDataset(train_subset, train_transforms)
 
     test_set = datasets.CIFAR100(root='./data', train=False,
@@ -265,8 +276,91 @@ def cifar100_loader(args) -> tuple([DataLoader, DataLoader]):
     if args.train_subset_indices_path is not None:
         train_transformed = torch.utils.data.Subset(train_transformed, indices)
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers = 8, pin_memory= True)
-    train_loader = DataLoader(
-        train_transformed, batch_size=args.batch_size, num_workers=8,
-        pin_memory=True)
+    
+    
+    if args.positive_pair_sample:                    
+        sampler = PositivePairSampler(train_transformed,targets = train_transformed.dataset.dataset.targets, batch_size=args.batch_size, classes_each_batch=args.classes_each_batch)
+        train_loader = DataLoader(train_transformed, num_workers=8, pin_memory=True, batch_sampler= sampler)        
+    else:
+        train_loader = DataLoader(train_transformed, batch_size=args.batch_size, num_workers=8, pin_memory=True)
 
     return train_loader, test_loader, num_classes    
+
+
+class TransformedDataset(Dataset):
+    """Wrapper class for augmented dataset.
+    
+    From https://discuss.pytorch.org/t/apply-different-transform-data-augmentation-to-train-and-validation/63580.
+
+    Args:
+        dataset (Dataset): Original dataset.
+        transform (transforms.Compose): Data augmentation to apply.
+    
+    """
+
+    def __init__(self, dataset: Dataset, transform: transforms.Compose):
+        """Instantiate object.
+        
+        Attributes:
+            dataset: Original dataset.
+            transform: Data augmentation to apply.
+
+        """
+        self.dataset = dataset
+        self.transform = transform
+
+    def __getitem__(self, index: int):
+        """Get augmented image."""
+        return self.transform(self.dataset[index][0]), self.dataset[index][1]
+
+    def __len__(self):
+        return len(self.dataset)
+    
+
+
+class PositivePairSampler(torch.utils.data.BatchSampler):
+    
+    def __init__(self, data_source,targets , batch_size, classes_each_batch ) -> None:
+        # Defined attrs
+        self.data_source = data_source
+        self.targets = torch.tensor(targets, dtype = torch.long)
+        self.batch_size = batch_size
+        self.classes_each_batch = classes_each_batch
+        
+        # Calculated attrs
+        self.target_set = list(set(targets))
+        self.available_classes = np.unique(targets)
+        self.num_classes = len(self.available_classes)                                
+        self.num_samples = self.batch_size // self.classes_each_batch
+        self.real_batch_size = self.num_samples * self.classes_each_batch
+        
+        # Iteration attrs
+        self.label_to_indices = {label: np.where(self.targets.numpy() == label)[0] for label in self.target_set}
+        self.used_label_indices_count = {label: 0 for label in self.target_set}
+        for l in self.target_set:
+            np.random.shuffle(self.label_to_indices[l])
+        
+        
+        # counter
+        self.count = 0
+        
+        
+    def __iter__(self):
+        self.count = 0
+        while self.count + self.real_batch_size <= len(self.data_source):
+            classes = np.random.choice(self.target_set, self.classes_each_batch, replace=False)
+            # print('*' * 80)
+            # print(classes)
+            indices = []
+            for class_ in classes:
+                indices.extend(self.label_to_indices[class_][self.used_label_indices_count[class_]:self.used_label_indices_count[class_] + self.num_samples])
+                self.used_label_indices_count[class_] += self.num_samples
+                if self.used_label_indices_count[class_] + self.num_samples > len(self.label_to_indices[class_]):
+                    np.random.shuffle(self.label_to_indices[class_])
+                    self.used_label_indices_count[class_] = 0
+            yield indices
+            self.count += self.classes_each_batch * self.num_samples
+                            
+    def __len__(self):
+        return len(self.data_source) // self.real_batch_size
+

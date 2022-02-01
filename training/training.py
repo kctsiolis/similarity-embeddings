@@ -343,7 +343,14 @@ class DistillationTrainer(Trainer):
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
             data = data.to(self.device, non_blocking = True)
-            target = target.to(self.device, non_blocking = True)
+            target = target.to(self.device, non_blocking = True)     
+
+            # n = target.shape[0]
+            # ppair = torch.sum(target.repeat(n,1) == target.unsqueeze(1).repeat(1,n))
+            # print('*' * 80)
+            # print(ppair / n**2)
+
+
             self.optimizer.zero_grad(set_to_none=True)            
             loss = self.distiller.compute_loss(self.student, self.teacher, data, target)
             train_loss.update(loss.item())
