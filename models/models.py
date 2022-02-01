@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152
 from models.resnet_cifar import resnet20_cifar, resnet32_cifar, resnet44_cifar, resnet56_cifar
-from models.resnet_hoblong import resnet56_hoblong, resnet110_hoblong
+from models.resnet_hoblong import resnet20_hoblong, resnet56_hoblong, resnet110_hoblong
 from models.general import CLIPDistill
 
 
@@ -41,6 +41,8 @@ def get_model(model_str: str, load_path: str = None,
         model = resnet56_cifar(num_classes, project, projection_dim)
     elif model_str == 'clip_distill':
         model = resnet56_cifar(num_classes, project, projection_dim)    
+    elif model_str == 'resnet20_hoblong':
+        model = resnet20_hoblong(num_classes, project, projection_dim)
     elif model_str == 'resnet56_hoblong':
         model = resnet56_hoblong(num_classes, project, projection_dim)
     elif model_str == 'resnet110_hoblong':
@@ -49,8 +51,8 @@ def get_model(model_str: str, load_path: str = None,
         raise ValueError('Model {} not defined.'.format(model_str))
 
     if load_path is not None:
-        try:
-            model.load_state_dict(torch.load(load_path)['model_state_dict'])
+        try:            
+            model.load_state_dict(torch.load(load_path)['model_state_dict'])        
         except KeyError:        
             try:
                 model.load_state_dict(torch.load(load_path)['model'])
@@ -89,6 +91,12 @@ def get_model_embedding_dim(model_str: str) -> int:
     elif model_str == 'resnet44_cifar':
         dim = 512
     elif model_str == 'resnet56_cifar':
+        dim = 64
+    elif model_str == 'resnet20_hoblong':
+        dim = 64
+    elif model_str == 'resnet56_hoblong':
+        dim = 64
+    elif model_str == 'resnet110_hoblong':
         dim = 64
     else:
         raise ValueError('Model {} not defined.'.format(model_str))

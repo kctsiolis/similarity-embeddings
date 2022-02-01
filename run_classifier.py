@@ -28,9 +28,11 @@ def main():
     logger = Logger('linear_classifier', args)
     model = get_model(args.model, args.model_path, num_classes=num_classes)
     model.probing_mode()
+    
     model.to(device)
     trainer = SupervisedTrainer(model, train_loader, val_loader, device, logger, args)
     trainer.train()
 
+    
 if __name__ == '__main__':
     main()

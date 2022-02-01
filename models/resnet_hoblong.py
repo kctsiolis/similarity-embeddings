@@ -258,8 +258,10 @@ def resnet14(**kwargs):
     return ResNet(14, [16, 16, 32, 64], 'basicblock', **kwargs)
 
 
-def resnet20(**kwargs):
-    return ResNet(20, [16, 16, 32, 64], 'basicblock', **kwargs)
+def resnet20_hoblong(num_classes, project=False, projection_dim=None):
+    if project:
+        raise ValueError('Projection not possible with Hobbit Long models')
+    return ResNet(20, [16, 16, 32, 64], 'basicblock', num_classes = num_classes)
 
 
 def resnet32(**kwargs):
