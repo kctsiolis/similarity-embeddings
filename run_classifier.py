@@ -26,13 +26,18 @@ def main():
 
     train_loader, val_loader, num_classes, device = run_base(args)
     logger = Logger('linear_classifier', args)
-    model = get_model(args.model, args.model_path, num_classes=num_classes)
+    model = get_model(args.model, args.model_path, num_classes=num_classes)    
+    # import torch.nn
+    # model.linear = torch.nn.Linear(64,100)
+    import torch.nn as nn
+    import torch
+    model.feature_scale = nn.Parameter(torch.tensor([300.])) 
     model.probing_mode()
+    
     
     model.to(device)
     trainer = SupervisedTrainer(model, train_loader, val_loader, device, logger, args)
-    trainer.train()
-
+    trainer.train()        
     
 if __name__ == '__main__':
     main()

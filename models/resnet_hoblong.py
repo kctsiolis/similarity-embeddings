@@ -9,7 +9,7 @@ https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
 '''
 import torch.nn as nn
 import torch.nn.functional as F
-import math
+import torch
 
 
 __all__ = ['resnet']
@@ -127,7 +127,8 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, num_filters[3], n, stride=2)
         self.avgpool = nn.AvgPool2d(8)
         self.fc = nn.Linear(num_filters[3] * block.expansion, num_classes)
-        self.classify = True        
+        self.classify = True       
+        self.feature_scale = nn.Parameter(torch.tensor([1.]))        
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -195,7 +196,8 @@ class ResNet(nn.Module):
         f4 = x
 
         if self.classify:
-            x = self.fc(x)
+            x = self.fc(x * self.feature_scale)
+            # x = self.fc(x)
 
         if is_feat:
             if preact:

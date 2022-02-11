@@ -20,7 +20,7 @@ def get_base_args(parser):
                         help='Choice of optimizer for training (default: sgd).')
     parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine', 'exponential'], default='cosine',
                         help='Choice of scheduler for training.')
-    parser.add_argument('--plateau-patience', type=int, default=5,
+    parser.add_argument('--plateau-patience', type=int, default=50,
                         help='Patience used in Plateau scheduler.')
     parser.add_argument('--seed', type=int, default=42, metavar='S',
                         help='random seed (default: 42)')

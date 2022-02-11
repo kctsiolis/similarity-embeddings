@@ -30,16 +30,16 @@ def get_margin_similarity(model, data, target, margin_value):
     # sinm[margin_mask] = 0
 
     #### Intra and Inter class margin
-    cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
-    cosm[margin_mask] = math.cos(0.001) # Inter-class margin should be smaller
-    sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-    sinm[margin_mask] = -math.sin(0.001) # Inter-class margin should be smaller
+    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
+    # cosm[margin_mask] = math.cos(0.001) # Inter-class margin should be smaller
+    # sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
+    # sinm[margin_mask] = -math.sin(0.001) # Inter-class margin should be smaller
 
     # # Just intraclass margin
-    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
-    # sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
-    # cosm[~margin_mask] = 1
-    # sinm[~margin_mask] = 0
+    cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
+    sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
+    cosm[~margin_mask] = 1
+    sinm[~margin_mask] = 0
 
     # print('*' * 80)                        
     # print(margin_mask)    
@@ -70,6 +70,12 @@ class SimilarityDistiller():
             data = torch.cat(data, dim=0)
         student_sims = get_similarity(student, data)
         teacher_sims = get_similarity(teacher, data)
+
+        print('*' * 200)
+        print(student_sims)        
+        raise ValueError('I wanna stop')
+
+
         loss = self.loss_function(student_sims, teacher_sims) 
         return loss
 
