@@ -9,7 +9,7 @@ def get_similarity(model, data):
     embs = F.normalize(embs, p=2, dim=1)           
     return torch.matmul(embs, embs.transpose(0,1)) 
 
-def get_margin_similarity(model, data, target, margin_value):
+def get_margin_similarity(model, data, target, margin_value, margin_type):
     embs = model(data)        
     embs = F.normalize(embs, p=2, dim=1)           
     sims = torch.matmul(embs, embs.transpose(0,1))    
@@ -24,11 +24,23 @@ def get_margin_similarity(model, data, target, margin_value):
     margin_mask = target.unsqueeze(1).repeat(1,n) == target.repeat(n,1)    
     
     # ### Interclass margin only
-    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
-    # sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-    # cosm[margin_mask] = 1
-    # sinm[margin_mask] = 0
-
+    if margin_type  == 'inter':
+        cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
+        sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
+        cosm[margin_mask] = 1
+        sinm[margin_mask] = 0
+    elif margin_type == 'intra':
+        cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
+        sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
+        cosm[~margin_mask] = 1
+        sinm[~margin_mask] = 0
+    elif margin_type == 'interintra':
+        cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
+        cosm[margin_mask] = math.cos(margin_value) # Inter-class margin should be smaller
+        sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
+        sinm[margin_mask] = -math.sin(margin_value) # Inter-class margin should be smaller
+    else:
+        raise ValueError('Margin type unavailable')
     #### Intra and Inter class margin
     # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
     # cosm[margin_mask] = math.cos(0.001) # Inter-class margin should be smaller
@@ -36,10 +48,10 @@ def get_margin_similarity(model, data, target, margin_value):
     # sinm[margin_mask] = -math.sin(0.001) # Inter-class margin should be smaller
 
     # # Just intraclass margin
-    cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
-    sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
-    cosm[~margin_mask] = 1
-    sinm[~margin_mask] = 0
+    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
+    # sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
+    # cosm[~margin_mask] = 1
+    # sinm[~margin_mask] = 0
 
     # print('*' * 80)                        
     # print(margin_mask)    
@@ -54,13 +66,16 @@ def get_weighted_similarity(model, data, teacher_temp):
     probits = torch.max(F.softmax(logits,dim = 1),dim=1).values        
     confidence = probits * probits[:,None]        
     embs = F.normalize(embs, p=2, dim=1)
-    sims = torch.matmul(embs, embs.transpose(0,1))
+    sims = torch.matmul(embs, embs.transpose(0,1))        
 
     return sims, confidence
 
 class SimilarityDistiller():
-    def __init__(self, augment):
+    def __init__(self, augment, margin,margin_value, margin_type):
         self.augment = augment
+        self.margin = margin
+        self.margin_type = margin_type
+        self.margin_value = margin_value
         self.transform = SimCLRTransform()
         self.loss_function = nn.MSELoss()
 
@@ -68,13 +83,11 @@ class SimilarityDistiller():
         if self.augment:
             data = self.transform(data, num_views=2)
             data = torch.cat(data, dim=0)
-        student_sims = get_similarity(student, data)
-        teacher_sims = get_similarity(teacher, data)
-
-        print('*' * 200)
-        print(student_sims)        
-        raise ValueError('I wanna stop')
-
+        if self.margin:            
+            teacher_sims = get_margin_similarity(teacher, data,target, self.margin_value,self.margin_type)
+        else:
+            teacher_sims = get_similarity(teacher, data)
+        student_sims = get_similarity(student, data)                
 
         loss = self.loss_function(student_sims, teacher_sims) 
         return loss

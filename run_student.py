@@ -30,7 +30,8 @@ def get_student_args(parser):
     parser.add_argument('--margin', action='store_true',
                         help='(For cosine distillation only) Should angular margin be applied ')
     parser.add_argument('--margin-value', type = float,default = 0.5,
-                        help='If [margin] is selected what should it be set to (Default 0.5)')     
+                        help='If [margin] is selected what should it be set to (Default 0.5)')
+    parser.add_argument('--margin-type', type=str, choices=['inter', 'intra', 'interintra'])                             
     parser.add_argument('--truncate-model', action = 'store_true',
                         help='Should we truncate the (student) model when training a linear classifier?')                        
     parser.add_argument('--truncation-level', type =int,
