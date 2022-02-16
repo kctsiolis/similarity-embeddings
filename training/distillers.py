@@ -13,7 +13,7 @@ def get_margin_similarity(model, data, target, margin_value, margin_type):
     embs = model(data)        
     embs = F.normalize(embs, p=2, dim=1)           
     sims = torch.matmul(embs, embs.transpose(0,1))    
-
+    
     #### Add margin to similarities
     # Using the identity cos(x +- m) = cos(x)cos(m) -+ sin(m)sin(x)                
     sine = torch.sqrt((1.0 - torch.pow(sims, 2)) + 1e-6).clamp(0,1) # add 1e-6 for numerical stability                                             
@@ -87,7 +87,8 @@ class SimilarityDistiller():
             teacher_sims = get_margin_similarity(teacher, data,target, self.margin_value,self.margin_type)
         else:
             teacher_sims = get_similarity(teacher, data)
-        student_sims = get_similarity(student, data)                
+        student_sims = get_similarity(student, data)  
+        
 
         loss = self.loss_function(student_sims, teacher_sims) 
         return loss
