@@ -19,10 +19,12 @@ def get_student_args(parser):
     parser.add_argument('--distillation-loss', type=str, choices=['similarity-based', 'similarity-weighted', 'kd'],
                         default='similarity-based',
                         help='Loss used for distillation.')
+    parser.add_argument('--sup-term', action='store_true',
+                        help='Add a supervised term to the loss?')                        
     parser.add_argument('--augmented-distillation', action='store_true',
                         help='Whether or not to use data augmentation in distillation.')
-    parser.add_argument('-c', type=float, default=0.5,
-                        help='Weighing of soft target and hard target loss in Hinton\'s KD.')
+    parser.add_argument('-c', type=float, default=0.1,
+                        help='Weighing of supervised and other terms in the loss')
     parser.add_argument('--wrap-in-projection', action='store_true',
                         help='Wrap the teacher model in a random projection (For distillation only)')
     parser.add_argument('--projection-dim', type=int, default=None,
@@ -55,8 +57,11 @@ def main():
     logger = Logger('distillation', args)
 
     student = get_model(args.student_model, load_path=args.student_path, project=args.project_embedder, num_classes = num_classes)
-    if args.distillation_loss != 'kd':
+    if (args.distillation_loss != 'kd') and (not args.sup_term):
         student.student_mode()
+    
+    if args.sup_term:
+        student.classify = False
     
     teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder, num_classes = num_classes)
     classify = args.distillation_loss == 'kd'

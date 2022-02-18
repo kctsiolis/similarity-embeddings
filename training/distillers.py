@@ -71,13 +71,18 @@ def get_weighted_similarity(model, data, teacher_temp):
     return sims, confidence
 
 class SimilarityDistiller():
-    def __init__(self, augment, margin,margin_value, margin_type):
+    def __init__(self, augment, margin,margin_value, margin_type, sup_term, c):
         self.augment = augment
         self.margin = margin
+        self.sup_term = sup_term
+        self.c = c
         self.margin_type = margin_type
         self.margin_value = margin_value
         self.transform = SimCLRTransform()
         self.loss_function = nn.MSELoss()
+
+        if self.sup_term:
+            self.ce = nn.CrossEntropyLoss()
 
     def compute_loss(self, student, teacher, data, target):
         if self.augment:
@@ -89,8 +94,12 @@ class SimilarityDistiller():
             teacher_sims = get_similarity(teacher, data)
         student_sims = get_similarity(student, data)  
         
-
         loss = self.loss_function(student_sims, teacher_sims) 
+        
+        if self.sup_term:
+            embs, logits = student.embs_and_logits(data)
+            loss = loss + self.c * self.ce(logits,target)
+
         return loss
 
 class KD():
