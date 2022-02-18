@@ -61,7 +61,7 @@ def main():
         student.student_mode()
     
     if args.sup_term:
-        student.classify = True
+        student.classify = False
     
     teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder, num_classes = num_classes)
     classify = args.distillation_loss == 'kd'
