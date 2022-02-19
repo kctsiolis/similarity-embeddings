@@ -21,42 +21,45 @@ def get_margin_similarity(model, data, target, margin_value, margin_type):
     # only apply margin to samples in different classes
     n = target.shape[0]
     device = target.get_device()    
-    margin_mask = target.unsqueeze(1).repeat(1,n) == target.repeat(n,1)    
+    positive_pairs = target.unsqueeze(1).repeat(1,n) == target.repeat(n,1)    
     
     # ### Interclass margin only
     if margin_type  == 'inter':
+        # Inter class angle margin
         cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
         sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-        cosm[margin_mask] = 1
-        sinm[margin_mask] = 0
+        cosm[positive_pairs] = 1
+        sinm[positive_pairs] = 0
+        sims = (torch.mul(sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)  
     elif margin_type == 'intra':
+        # Intra class angle margin
         cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
         sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
-        cosm[~margin_mask] = 1
-        sinm[~margin_mask] = 0
+        cosm[~positive_pairs] = 1
+        sinm[~positive_pairs] = 0
+        sims = (torch.mul(sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)  
     elif margin_type == 'interintra':
+        # Inter and intra class angle margin
         cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
-        cosm[margin_mask] = math.cos(margin_value) # Inter-class margin should be smaller
+        cosm[positive_pairs] = math.cos(margin_value) # Inter-class margin should be smaller
         sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-        sinm[margin_mask] = -math.sin(margin_value) # Inter-class margin should be smaller
+        sinm[positive_pairs] = -math.sin(margin_value) # Inter-class margin should be smaller
+        sims = (torch.mul(sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)  
+    elif margin_type  == 'inter-scaled':
+        # Inter class scaling margin
+        sims[positive_pairs] = torch.minimum( (1 + margin_value) * sims[positive_pairs] , torch.tensor([1.],dtype  = torch.float32, device = device))        
+    elif margin_type == 'intra-scaled':
+        # Intra class scaling margin
+        sims[~positive_pairs] = (1 - margin_value) * sims[~positive_pairs]
+    elif margin_type == 'interintra-scaled':
+        # Inter and intra class scaled margin
+        sims[positive_pairs] = torch.minimum( (1 + margin_value) * sims[positive_pairs] , torch.tensor([1.],dtype  = torch.float32, device = device))
+        sims[~positive_pairs] = (1 - margin_value) * sims[~positive_pairs]
     else:
         raise ValueError('Margin type unavailable')
-    #### Intra and Inter class margin
-    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)                
-    # cosm[margin_mask] = math.cos(0.001) # Inter-class margin should be smaller
-    # sinm = math.sin(margin_value) * torch.ones(n,n).to(device)                
-    # sinm[margin_mask] = -math.sin(0.001) # Inter-class margin should be smaller
+ 
 
-    # # Just intraclass margin
-    # cosm =  math.cos(margin_value) * torch.ones(n,n).to(device)        
-    # sinm = -math.sin(margin_value) * torch.ones(n,n).to(device)                
-    # cosm[~margin_mask] = 1
-    # sinm[~margin_mask] = 0
-
-    # print('*' * 80)                        
-    # print(margin_mask)    
-    # print(student_sims)
-    return (torch.mul(sims, cosm) -  torch.mul(sine, sinm)).fill_diagonal_(1.)  
+    return sims
 
 def get_weighted_similarity(model, data, teacher_temp):    
     
@@ -93,6 +96,8 @@ class SimilarityDistiller():
         else:
             teacher_sims = get_similarity(teacher, data)
         student_sims = get_similarity(student, data)  
+
+
         
         loss = self.loss_function(student_sims, teacher_sims) 
         
