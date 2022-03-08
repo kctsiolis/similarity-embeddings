@@ -55,6 +55,16 @@ def get_margin_similarity(model, data, target, margin_value, margin_type):
         # Inter and intra class scaled margin
         sims[positive_pairs] = torch.minimum( (1 + margin_value) * sims[positive_pairs] , torch.tensor([1.],dtype  = torch.float32, device = device))
         sims[~positive_pairs] = (1 - margin_value) * sims[~positive_pairs]
+    elif margin_type  == 'inter-sum':
+        # Inter class scaling margin
+        sims[positive_pairs] = torch.minimum( margin_value +  sims[positive_pairs] , torch.tensor([1.],dtype  = torch.float32, device = device))        
+    elif margin_type == 'intra-sum':
+        # Intra class scaling margin
+        sims[~positive_pairs] = torch.maximum( -margin_value +  sims[~positive_pairs] , torch.tensor([0.],dtype  = torch.float32, device = device))        
+    elif margin_type == 'interintra-sum':
+        # Inter and intra class scaled margin
+        sims[positive_pairs] = torch.minimum( margin_value +  sims[positive_pairs] , torch.tensor([1.],dtype  = torch.float32, device = device))        
+        sims[~positive_pairs] = torch.maximum( -margin_value +  sims[~positive_pairs] , torch.tensor([0.],dtype  = torch.float32, device = device))        
     else:
         raise ValueError('Margin type unavailable')
  
