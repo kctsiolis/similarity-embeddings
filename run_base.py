@@ -18,7 +18,7 @@ def get_base_args(parser):
                         help='learning rate (default: 0.1)')
     parser.add_argument('--optimizer', type=str, choices=['adam', 'sgd'], default='sgd',
                         help='Choice of optimizer for training (default: sgd).')
-    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine', 'exponential'], default='cosine',
+    parser.add_argument('--scheduler', type=str, choices=['plateau', 'cosine', 'exponential','crd_paper'], default='cosine',
                         help='Choice of scheduler for training.')
     parser.add_argument('--plateau-patience', type=int, default=50,
                         help='Patience used in Plateau scheduler.')

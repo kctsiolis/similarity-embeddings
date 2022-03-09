@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import numpy as np                                    
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LambdaLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LambdaLR, MultiStepLR
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 from training.logger import Logger
@@ -64,6 +64,10 @@ class Trainer():
             self.change_epochs = None
         elif self.sched_str == 'exponential':
             self.scheduler = LambdaLR(self.optimizer, lr_lambda = lambda x :1e-5 + (1e-2 - 1e-5) * x * 195 ,verbose = True)
+            self.change_epochs = None
+        elif self.sched_str == 'crd_paper':
+            # Reduce lr at 150 epochs and then every 30 epochs after 
+            self.scheduler = MultiStepLR(self.optimizer,gamma = 0.1, milestones = [i + 150 for i in range(self.epochs - 150) if (i % 30 == 0)] ,verbose = True)
             self.change_epochs = None
 
         self.early_stop = args.early_stop
