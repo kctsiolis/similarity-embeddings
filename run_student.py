@@ -23,8 +23,10 @@ def get_student_args(parser):
                         help='Add a supervised term to the loss?')                        
     parser.add_argument('--augmented-distillation', action='store_true',
                         help='Whether or not to use data augmentation in distillation.')
-    parser.add_argument('-c', type=float, default=0.1,
+    parser.add_argument('--alpha', type=float, default=0.1,
                         help='Weighing of supervised and other terms in the loss')
+    parser.add_argument('--temperature', type=float, default=4,
+                        help='Temperature to use in KD')                        
     parser.add_argument('--wrap-in-projection', action='store_true',
                         help='Wrap the teacher model in a random projection (For distillation only)')
     parser.add_argument('--projection-dim', type=int, default=None,

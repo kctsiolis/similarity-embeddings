@@ -340,7 +340,7 @@ class DistillationTrainer(Trainer):
         elif self.loss_type == 'similarity-weighted':
             self.distiller = WeightedDistiller(args.teacher_temp)
         else:
-            self.distiller = KD(args.c)
+            self.distiller = KD(args.alpha, args.temperature)
 
     def train_epoch(self, epoch):
         self.student.train()      

@@ -118,19 +118,20 @@ class SimilarityDistiller():
         return loss
 
 class KD():
-    def __init__(self, c):
-        if c < 0 or c > 1:
+    def __init__(self, alpha, T):
+        if alpha < 0 or alpha > 1:
             raise ValueError('c must be in [0,1].')
-        self.c = c
+        self.T = T
+        self.alpha = alpha
         self.sup_term = nn.CrossEntropyLoss()
         self.kd_term = nn.KLDivLoss(reduction='batchmean')
 
     def compute_loss(self, student, teacher, data, target):
         output = student(data)
-        model_probs = nn.LogSoftmax(dim=1)(output)
-        teacher_probs = nn.Softmax(dim=1)(teacher(data))            
-        loss = self.c * self.kd_term(model_probs, teacher_probs) + \
-            (1-self.c) * self.sup_term(output, target)
+        model_probs = nn.LogSoftmax(dim=1)(output / self.T)
+        teacher_probs = nn.Softmax(dim=1)(teacher(data) / self.T)            
+        loss = self.alpha * self.T**2 * self.kd_term(model_probs, teacher_probs) + \
+            (1-self.alpha) * self.sup_term(output, target)
         
         return loss
 
