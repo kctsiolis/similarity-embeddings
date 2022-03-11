@@ -16,8 +16,8 @@ def get_student_args(parser):
                         help='Choice of student model.')
     parser.add_argument('--project-embedder', action='store_true',
                         help='Add a projection head to the embedder.')
-    parser.add_argument('--distillation-loss', type=str, choices=['similarity-based', 'similarity-weighted', 'kd'],
-                        default='similarity-based',
+    parser.add_argument('--distillation-loss', type=str, choices=['similarity-mse', 'similarity-weighted', 'similarity-kl', 'kd'],
+                        default='similarity-mse',
                         help='Loss used for distillation.')
     parser.add_argument('--sup-term', action='store_true',
                         help='Add a supervised term to the loss?')                        

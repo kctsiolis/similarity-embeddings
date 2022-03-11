@@ -335,8 +335,10 @@ class DistillationTrainer(Trainer):
         self.margin_value = args.margin_value
         self.loss_type = args.distillation_loss
         
-        if self.loss_type == 'similarity-based':
-            self.distiller = SimilarityDistiller(args.augmented_distillation, self.margin, self.margin_value,self.margin_type, args.sup_term,args.c)
+        if self.loss_type == 'similarity-mse':
+            self.distiller = SimilarityDistiller('mse', args.augmented_distillation, self.margin, self.margin_value,self.margin_type, args.sup_term, args.c)
+        elif self.loss_type == 'similarity-kl':
+            self.distiller == SimilarityDistiller('kl', args.augmented_distillation, self.margin, self.margin_value,self.margin_type, args.sup_term, args.c)
         elif self.loss_type == 'similarity-weighted':
             self.distiller = WeightedDistiller(args.teacher_temp)
         else:
