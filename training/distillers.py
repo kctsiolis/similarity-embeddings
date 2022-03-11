@@ -84,11 +84,11 @@ def get_weighted_similarity(model, data, teacher_temp):
     return sims, confidence
 
 class SimilarityDistiller():
-    def __init__(self, augment, margin,margin_value, margin_type, sup_term, c):
+    def __init__(self, augment, margin,margin_value, margin_type, sup_term,alpha):
         self.augment = augment
         self.margin = margin
         self.sup_term = sup_term
-        self.c = c
+        self.alpha = alpha        
         self.margin_type = margin_type
         self.margin_value = margin_value
         self.transform = SimCLRTransform()
@@ -113,7 +113,7 @@ class SimilarityDistiller():
         
         if self.sup_term:
             embs, logits = student.embs_and_logits(data)
-            loss = loss + self.c * self.ce(logits,target)
+            loss = self.alpha * loss + (1 - self.alpha) * self.ce(logits,target)
 
         return loss
 
