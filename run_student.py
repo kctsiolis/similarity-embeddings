@@ -12,11 +12,10 @@ def get_student_args(parser):
     parser.add_argument('--teacher-model', type=str, default=None,
                         help='Choice of teacher model.')
     parser.add_argument('--teacher-temp', type=float, default=None, help = 'Optimal temperature for calibration')                                    
-    parser.add_argument('--student-model', type=str,
-                        help='Choice of student model.')
+    parser.add_argument('--student-model', type=str, help='Choice of student model.')
     parser.add_argument('--project-embedder', action='store_true',
                         help='Add a projection head to the embedder.')
-    parser.add_argument('--distillation-loss', type=str, choices=['similarity-based', 'similarity-weighted', 'kd'],
+    parser.add_argument('--distillation-loss', type=str, choices=['similarity-based', 'similarity-weighted', 'kd','combination'],
                         default='similarity-based',
                         help='Loss used for distillation.')
     parser.add_argument('--sup-term', action='store_true',
@@ -24,7 +23,11 @@ def get_student_args(parser):
     parser.add_argument('--augmented-distillation', action='store_true',
                         help='Whether or not to use data augmentation in distillation.')
     parser.add_argument('--alpha', type=float, default=0.1,
-                        help='Weighing of supervised and other terms in the loss')
+                        help='Weighing of KD loss term')
+    parser.add_argument('--beta', type=float, default=0.1,
+                        help='[Combination distillation] Weighing of similarity term')
+    parser.add_argument('--gamma', type=float, default=0.1,
+                        help='[Combination distillation] Weighing of supervised term')                        
     parser.add_argument('--temperature', type=float, default=4,
                         help='Temperature to use in KD')                        
     parser.add_argument('--wrap-in-projection', action='store_true',
@@ -66,8 +69,12 @@ def main():
         student.classify = False
     
     teacher = get_model(args.teacher_model, load_path=args.teacher_path, project=args.project_embedder, num_classes = num_classes)
-    classify = args.distillation_loss == 'kd'
+    classify = (args.distillation_loss == 'kd') or (args.distillation_loss == 'combination')
     teacher.teacher_mode(classify)
+
+    if args.distillation_loss == 'combination':
+        student.end_to_end_mode()        
+
 
     student.to(device)
     teacher.to(device)

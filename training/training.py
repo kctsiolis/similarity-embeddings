@@ -25,7 +25,7 @@ from training.logger import Logger
 from training.data_augmentation import SimCLRTransform
 import time
 
-from training.distillers import SimilarityDistiller, KD, WeightedDistiller
+from training.distillers import SimilarityDistiller, KD, WeightedDistiller, CombinationDistiller
 
 class Trainer():
 
@@ -339,13 +339,24 @@ class DistillationTrainer(Trainer):
             self.distiller = SimilarityDistiller(args.augmented_distillation, self.margin, self.margin_value,self.margin_type, args.sup_term, args.alpha)
         elif self.loss_type == 'similarity-weighted':
             self.distiller = WeightedDistiller(args.teacher_temp)
-        else:
+        elif self.loss_type == 'combination':
+            self.distiller = CombinationDistiller(args.augmented_distillation, self.margin, self.margin_value,self.margin_type, args.temperature, args.alpha, args.beta , args.gamma)        
+        elif self.loss_type == 'kd':
             self.distiller = KD(args.alpha, args.temperature)
+        else:
+            raise ValueError(f'Distillaiton type {self.loss_type} unavailable')
+
+
+
+
 
     def train_epoch(self, epoch):
         self.student.train()      
         self.teacher.eval()
-        train_loss = AverageMeter()        
+        train_loss = AverageMeter()    
+        if (self.loss_type == 'kd') or (self.loss_type == 'combination'):
+            train_top1_acc = AverageMeter()
+            train_top5_acc = AverageMeter()                    
         for batch_idx, (data, target) in enumerate(self.train_loader):
             self.update_lr()
             data = data.to(self.device, non_blocking = True)
@@ -358,7 +369,13 @@ class DistillationTrainer(Trainer):
 
 
             self.optimizer.zero_grad(set_to_none=True)            
-            loss = self.distiller.compute_loss(self.student, self.teacher, data, target)
+            loss, student_logits = self.distiller.compute_loss(self.student, self.teacher, data, target)
+
+            if (self.loss_type == 'kd') or (self.loss_type == 'combination'):
+                top1_acc, top5_acc = compute_accuracy(student_logits, target)
+                train_top1_acc.update(top1_acc)
+                train_top5_acc.update(top5_acc)        
+                    
             train_loss.update(loss.item())
             loss.backward()
             self.optimizer.step()
@@ -376,8 +393,11 @@ class DistillationTrainer(Trainer):
             self.itr += 1
         
             # self.scheduler.step()            
+        if (self.loss_type == 'kd') or (self.loss_type == 'combination'):
+            return train_loss.get_avg(), train_top1_acc.get_avg(), train_top5_acc.get_avg()
+        else:
+            return train_loss.get_avg(), None, None
         
-        return train_loss.get_avg(), None, None
 
     def validate(self):
         self.model.eval()
@@ -387,7 +407,8 @@ class DistillationTrainer(Trainer):
             for data, target in self.val_loader:
                 data = data.to(self.device, non_blocking = True)
                 target = target.to(self.device, non_blocking = True)
-                loss += self.distiller.compute_loss(self.student, self.teacher, data, target).item()
+                loss, _ = self.distiller.compute_loss(self.student, self.teacher, data, target)
+                loss += loss.item()
 
         loss = loss / len(self.val_loader)
 

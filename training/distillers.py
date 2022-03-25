@@ -5,12 +5,14 @@ from training.data_augmentation import SimCLRTransform
 import math
 
 def get_similarity(model, data):
-    embs = model(data)     
-    embs = F.normalize(embs, p=2, dim=1)           
-    return torch.matmul(embs, embs.transpose(0,1)) 
+    embs = model(data)         
+    return get_similarity_from_embeddings(embs)
 
-def get_margin_similarity(model, data, target, margin_value, margin_type):
-    embs = model(data)        
+def get_similarity_from_embeddings(embs):    
+    embs = F.normalize(embs, p=2, dim=1)           
+    return torch.matmul(embs, embs.transpose(0,1))     
+
+def get_margin_similarity_from_embeddings(embs, target, margin_value, margin_type):    
     embs = F.normalize(embs, p=2, dim=1)           
     sims = torch.matmul(embs, embs.transpose(0,1))    
     
@@ -71,6 +73,11 @@ def get_margin_similarity(model, data, target, margin_value, margin_type):
 
     return sims
 
+
+def get_margin_similarity(model, data, target, margin_value, margin_type):
+    embs = model(data)        
+    return get_margin_similarity_from_embeddings(embs, target, margin_value, margin_type)        
+
 def get_weighted_similarity(model, data, teacher_temp):    
     
     embs, logits = model.embs_and_logits(data)    
@@ -82,6 +89,89 @@ def get_weighted_similarity(model, data, teacher_temp):
     sims = torch.matmul(embs, embs.transpose(0,1))        
 
     return sims, confidence
+
+
+class CombinationDistiller():           
+    def __init__(self, augment, margin,margin_value, margin_type, temperature, alpha, beta , gamma):        
+        self.augment = augment
+        self.transform = SimCLRTransform()
+        self.margin = margin        
+        self.T = temperature
+        self.alpha = alpha  
+        self.beta = beta        
+        self.gamma = gamma  
+        self.margin_type = margin_type
+        self.margin_value = margin_value        
+        self.mse_loss = nn.MSELoss()        
+        self.ce_loss = nn.CrossEntropyLoss()
+        self.kd_loss = nn.KLDivLoss(reduction='batchmean')
+
+    def compute_loss(self, student, teacher, data, target):
+        if self.augment:
+            data = self.transform(data, num_views=2)
+            data = torch.cat(data, dim=0)
+        
+        teacher_embs, teacher_logits = teacher.embs_and_logits(data)
+        student_embs, student_logits = student.embs_and_logits(data)
+        
+        # Used for similarity term
+        if self.beta != 0:
+            if self.margin:            
+                teacher_sims = get_margin_similarity_from_embeddings(teacher_embs ,target, self.margin_value,self.margin_type)
+            else:
+                teacher_sims = get_similarity_from_embeddings(teacher_embs)
+            student_sims = get_similarity_from_embeddings(student_embs)  
+
+
+        loss = 0
+        ## Calculate the KD term
+        if self.alpha != 0:
+            student_probs = nn.LogSoftmax(dim=1)(student_logits / self.T)
+            teacher_probs = nn.Softmax(dim=1)(teacher_logits / self.T)            
+            loss = self.alpha * self.T**2 * self.kd_loss(student_probs, teacher_probs)
+
+
+        ## Calculate the supervised term
+        if self.gamma != 0:
+            loss = loss + self.gamma * self.ce_loss(student_logits, target)
+
+        ## Calculate the similarity based term
+        if self.beta != 0:
+            loss = loss + self.beta * self.mse_loss(student_sims, teacher_sims)
+                            
+        return loss, student_logits
+
+class KD():
+    def __init__(self, alpha, T):
+        if alpha < 0 or alpha > 1:
+            raise ValueError('alpha must be in [0,1].')
+        self.T = T
+        self.alpha = alpha
+        self.sup_term = nn.CrossEntropyLoss()
+        self.kd_term = nn.KLDivLoss(reduction='batchmean')
+
+    def compute_loss(self, student, teacher, data, target):
+        output = student(data)
+        model_probs = nn.LogSoftmax(dim=1)(output / self.T)
+        teacher_probs = nn.Softmax(dim=1)(teacher(data) / self.T)            
+        loss = self.alpha * self.T**2 * self.kd_term(model_probs, teacher_probs) + \
+            (1-self.alpha) * self.sup_term(output, target)
+        
+        return loss, output
+
+class WeightedDistiller():
+    def __init__(self, teacher_temp = None):
+        self.teacher_temp = teacher_temp
+
+    def compute_loss(self, student, teacher, data, target):
+        student_sims = get_similarity(student, data)
+        teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data, self.teacher_temp)
+        
+        loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0]**2 
+        
+        return loss, None
+
+
 
 class SimilarityDistiller():
     def __init__(self, augment, margin,margin_value, margin_type, sup_term,alpha):
@@ -115,34 +205,4 @@ class SimilarityDistiller():
             embs, logits = student.embs_and_logits(data)
             loss = self.alpha * loss + (1 - self.alpha) * self.ce(logits,target)
 
-        return loss
-
-class KD():
-    def __init__(self, alpha, T):
-        if alpha < 0 or alpha > 1:
-            raise ValueError('c must be in [0,1].')
-        self.T = T
-        self.alpha = alpha
-        self.sup_term = nn.CrossEntropyLoss()
-        self.kd_term = nn.KLDivLoss(reduction='batchmean')
-
-    def compute_loss(self, student, teacher, data, target):
-        output = student(data)
-        model_probs = nn.LogSoftmax(dim=1)(output / self.T)
-        teacher_probs = nn.Softmax(dim=1)(teacher(data) / self.T)            
-        loss = self.alpha * self.T**2 * self.kd_term(model_probs, teacher_probs) + \
-            (1-self.alpha) * self.sup_term(output, target)
-        
-        return loss
-
-class WeightedDistiller():
-    def __init__(self, teacher_temp = None):
-        self.teacher_temp = teacher_temp
-
-    def compute_loss(self, student, teacher, data, target):
-        student_sims = get_similarity(student, data)
-        teacher_sims, teacher_confidence = get_weighted_similarity(teacher, data, self.teacher_temp)
-        
-        loss = torch.sum(teacher_confidence * (student_sims - teacher_sims)**2) / student_sims.shape[0]**2 
-        
-        return loss
+        return loss * 500, None
